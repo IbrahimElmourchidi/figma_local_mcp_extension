@@ -1,0 +1,469 @@
+{
+  "name": "figma-mcp-bridge",
+  "displayName": "Figma Local MCP Bridge",
+  "description": "Manage the local Figma MCP bridge server, the Figma dev plugin, and opencode integration directly from VS Code.",
+  "version": "0.1.0",
+  "publisher": "ibrahimelmourchidi",
+  "license": "MIT",
+  "icon": "images/icon.png",
+  "engines": {
+    "vscode": "^1.101.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "figma",
+    "mcp",
+    "opencode",
+    "bridge"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "figmaMcpBridge",
+          "title": "Figma MCP",
+          "icon": "$(hubot)"
+        }
+      ]
+    },
+    "views": {
+      "figmaMcpBridge": [
+        {
+          "id": "figmaMcpBridge.view",
+          "name": "Dashboard",
+          "icon": "$(hubot)"
+        }
+      ]
+    },
+    "mcpServerDefinitionProviders": [
+      {
+        "id": "figmaMcpBridge.servers",
+        "label": "Figma MCP Bridge"
+      }
+    ],
+    "commands": [
+      {
+        "command": "figmaMcpBridge.setBridgePassword",
+        "title": "Figma MCP Bridge: Set Pairing Password"
+      },
+      {
+        "command": "figmaMcpBridge.regenerateBridgePassword",
+        "title": "Figma MCP Bridge: Regenerate Pairing Password"
+      },
+      {
+        "command": "figmaMcpBridge.setFigmaToken",
+        "title": "Figma MCP Bridge: Set Figma Token"
+      },
+      {
+        "command": "figmaMcpBridge.clearFigmaToken",
+        "title": "Figma MCP Bridge: Clear Figma Token"
+      },
+      {
+        "command": "figmaMcpBridge.startBridge",
+        "title": "Start Bridge",
+        "icon": "$(play)"
+      },
+      {
+        "command": "figmaMcpBridge.stopBridge",
+        "title": "Stop Bridge",
+        "icon": "$(debug-stop)"
+      },
+      {
+        "command": "figmaMcpBridge.restartBridge",
+        "title": "Restart Bridge",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "figmaMcpBridge.killOrphans",
+        "title": "Kill Orphan Bridges",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "figmaMcpBridge.testConnection",
+        "title": "Test Bridge Connection",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "figmaMcpBridge.copyUrl",
+        "title": "Copy Bridge URL",
+        "icon": "$(clippy)"
+      },
+      {
+        "command": "figmaMcpBridge.copyToken",
+        "title": "Copy Pairing Token",
+        "icon": "$(key)"
+      },
+      {
+        "command": "figmaMcpBridge.openBridgeLogs",
+        "title": "Open Bridge Logs",
+        "icon": "$(output)"
+      },
+      {
+        "command": "figmaMcpBridge.clearLogs",
+        "title": "Clear Bridge Logs",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "figmaMcpBridge.showTree",
+        "title": "Figma MCP: Show Dashboard"
+      },
+      {
+        "command": "figmaMcpBridge.configureOpencode",
+        "title": "Configure opencode",
+        "icon": "$(file-code)"
+      },
+      {
+        "command": "figmaMcpBridge.previewOpencodeConfig",
+        "title": "Preview opencode Config",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "figmaMcpBridge.installPlugin",
+        "title": "Install Figma Plugin",
+        "icon": "$(repo-clone)"
+      },
+      {
+        "command": "figmaMcpBridge.uninstallPlugin",
+        "title": "Uninstall Figma Plugin",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "figmaMcpBridge.openPluginFolder",
+        "title": "Open Plugin Folder",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "figmaMcpBridge.refreshPluginStatus",
+        "title": "Refresh Plugin Status",
+        "icon": "$(search)"
+      },
+      {
+        "command": "figmaMcpBridge.buildFromSource",
+        "title": "Figma MCP: Build Runtime From Source",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "figmaMcpBridge.checkRuntimeUpdate",
+        "title": "Figma MCP: Check Runtime Update",
+        "icon": "$(cloud-download)"
+      },
+      {
+        "command": "figmaMcpBridge.rollbackRuntime",
+        "title": "Figma MCP: Rollback Runtime",
+        "icon": "$(history)"
+      },
+      {
+        "command": "figmaMcpBridge.forceReinstallRuntime",
+        "title": "Figma MCP: Force Reinstall Runtime Seed",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "figmaMcpBridge.openBuildLogs",
+        "title": "Open Build Logs",
+        "icon": "$(output)"
+      },
+      {
+        "command": "figmaMcpBridge.runSystemCheck",
+        "title": "Figma MCP: Run System Check",
+        "icon": "$(checklist)"
+      },
+      {
+        "command": "figmaMcpBridge.saveSettings",
+        "title": "Figma MCP: Validate Settings"
+      }
+    ],
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "figmaMcpBridge.setBridgePassword"
+        },
+        {
+          "command": "figmaMcpBridge.regenerateBridgePassword"
+        },
+        {
+          "command": "figmaMcpBridge.setFigmaToken"
+        },
+        {
+          "command": "figmaMcpBridge.clearFigmaToken"
+        },
+        {
+          "command": "figmaMcpBridge.showTree"
+        },
+        {
+          "command": "figmaMcpBridge.buildFromSource"
+        },
+        {
+          "command": "figmaMcpBridge.checkRuntimeUpdate"
+        },
+        {
+          "command": "figmaMcpBridge.rollbackRuntime"
+        },
+        {
+          "command": "figmaMcpBridge.forceReinstallRuntime"
+        },
+        {
+          "command": "figmaMcpBridge.runSystemCheck"
+        },
+        {
+          "command": "figmaMcpBridge.saveSettings"
+        },
+        {
+          "command": "figmaMcpBridge.configureOpencode"
+        },
+        {
+          "command": "figmaMcpBridge.previewOpencodeConfig"
+        },
+        {
+          "command": "figmaMcpBridge.openBridgeLogs"
+        },
+        {
+          "command": "figmaMcpBridge.clearLogs"
+        },
+        {
+          "command": "figmaMcpBridge.openBuildLogs"
+        },
+        {
+          "command": "figmaMcpBridge.startBridge",
+          "when": "false"
+        },
+        {
+          "command": "figmaMcpBridge.stopBridge",
+          "when": "false"
+        },
+        {
+          "command": "figmaMcpBridge.restartBridge",
+          "when": "false"
+        },
+        {
+          "command": "figmaMcpBridge.killOrphans",
+          "when": "false"
+        },
+        {
+          "command": "figmaMcpBridge.testConnection",
+          "when": "false"
+        },
+        {
+          "command": "figmaMcpBridge.copyUrl",
+          "when": "false"
+        },
+        {
+          "command": "figmaMcpBridge.copyToken",
+          "when": "false"
+        },
+        {
+          "command": "figmaMcpBridge.installPlugin",
+          "when": "false"
+        },
+        {
+          "command": "figmaMcpBridge.uninstallPlugin",
+          "when": "false"
+        },
+        {
+          "command": "figmaMcpBridge.openPluginFolder",
+          "when": "false"
+        },
+        {
+          "command": "figmaMcpBridge.refreshPluginStatus",
+          "when": "false"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "figmaMcpBridge.startBridge",
+          "when": "view == figmaMcpBridge.view",
+          "group": "navigation@1"
+        },
+        {
+          "command": "figmaMcpBridge.stopBridge",
+          "when": "view == figmaMcpBridge.view",
+          "group": "navigation@2"
+        },
+        {
+          "command": "figmaMcpBridge.restartBridge",
+          "when": "view == figmaMcpBridge.view",
+          "group": "navigation@3"
+        },
+        {
+          "command": "figmaMcpBridge.runSystemCheck",
+          "when": "view == figmaMcpBridge.view",
+          "group": "navigation@4"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "figmaMcpBridge.startBridge",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.bridge.start",
+          "group": "inline"
+        },
+        {
+          "command": "figmaMcpBridge.stopBridge",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.bridge.stop",
+          "group": "inline"
+        },
+        {
+          "command": "figmaMcpBridge.testConnection",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.bridge.test",
+          "group": "inline"
+        },
+        {
+          "command": "figmaMcpBridge.installPlugin",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.plugin.install",
+          "group": "inline"
+        },
+        {
+          "command": "figmaMcpBridge.buildFromSource",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.runtime.build",
+          "group": "inline"
+        },
+        {
+          "command": "figmaMcpBridge.checkRuntimeUpdate",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.runtime.check",
+          "group": "1_runtime@1"
+        },
+        {
+          "command": "figmaMcpBridge.rollbackRuntime",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.runtime.rollback",
+          "group": "1_runtime@2"
+        },
+        {
+          "command": "figmaMcpBridge.forceReinstallRuntime",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.runtime.reinstall",
+          "group": "1_runtime@3"
+        },
+        {
+          "command": "figmaMcpBridge.configureOpencode",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.mcp.opencode",
+          "group": "2_mcp@1"
+        },
+        {
+          "command": "figmaMcpBridge.previewOpencodeConfig",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.mcp.preview",
+          "group": "2_mcp@2"
+        },
+        {
+          "command": "figmaMcpBridge.uninstallPlugin",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.plugin.uninstall",
+          "group": "3_plugin@1"
+        },
+        {
+          "command": "figmaMcpBridge.openPluginFolder",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.plugin.open",
+          "group": "3_plugin@2"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Figma MCP Bridge",
+      "properties": {
+        "figmaMcpBridge.port": {
+          "type": "number",
+          "default": 3845,
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Port the bridge server listens on. Must match the Figma plugin's devAllowedDomains."
+        },
+        "figmaMcpBridge.host": {
+          "type": "string",
+          "default": "127.0.0.1",
+          "enum": [
+            "127.0.0.1",
+            "localhost",
+            "::1"
+          ],
+          "description": "Host the bridge server binds to."
+        },
+        "figmaMcpBridge.autoStart": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically start the bridge server when VS Code activates this extension."
+        },
+        "figmaMcpBridge.mcpServerPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Path to a custom mcp-server.cjs. Leave empty to use the bundled/managed runtime."
+        },
+        "figmaMcpBridge.nodePath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Path to a real Node.js executable used for source builds (and as a fallback for servers). Leave empty to auto-detect. Bridge/MCP child processes prefer VS Code's own Node via ELECTRON_RUN_AS_NODE."
+        },
+        "figmaMcpBridge.opencodeNodePath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Path to the Node.js executable used in the exported opencode.json config (opencode spawns it outside VS Code, so this must be a real system Node install). Leave empty to auto-detect."
+        },
+        "figmaMcpBridge.figmaPluginId": {
+          "type": "string",
+          "default": "",
+          "description": "Override the Figma plugin manifest's id. Leave empty to use the bundled default."
+        },
+        "figmaMcpBridge.autoCheckUpdates": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically check for bridge/MCP runtime bundle updates on activation."
+        }
+      }
+    },
+    "problemMatchers": [
+      {
+        "name": "esbuild-watch",
+        "source": "esbuild",
+        "owner": "esbuild",
+        "fileLocation": "relative",
+        "pattern": {
+          "regexp": "^\\s*[✘>]\\s\\[ERROR\\]\\s(.*)$",
+          "message": 1
+        },
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": "\\[watch\\] build started",
+          "endsPattern": "\\[watch\\] build finished"
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run package",
+    "compile": "npm run check-types && npm run lint && node esbuild.js",
+    "watch": "node esbuild.js --watch",
+    "watch:types": "tsc --noEmit --watch",
+    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "check-types": "tsc --noEmit",
+    "lint": "eslint src test",
+    "sync-runtime": "node tool/build-runtime.mjs",
+    "compile-tests": "tsc -p . --outDir out",
+    "pretest:integration": "npm run compile-tests && npm run compile",
+    "test:integration": "vscode-test",
+    "test:unit": "vitest run",
+    "test": "npm run test:unit && npm run test:integration"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.15.0",
+    "@types/mocha": "^10.0.9",
+    "@types/node": "^20.17.9",
+    "@types/vscode": "^1.101.0",
+    "@vscode/test-cli": "^0.0.10",
+    "@vscode/test-electron": "^2.4.1",
+    "esbuild": "^0.24.0",
+    "eslint": "^9.15.0",
+    "mocha": "^10.8.2",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.17.0",
+    "vitest": "^2.1.8"
+  },
+  "dependencies": {
+    "fflate": "^0.8.3"
+  }
+}
