@@ -110,8 +110,8 @@ function sectionStatus(
     }
     case 'plugin':
       return snapshot.plugin.installed
-        ? { label: 'Installed', icon: 'check' }
-        : { label: 'Not installed', icon: 'circle-slash' };
+        ? { label: 'Built', icon: 'check' }
+        : { label: 'Not built', icon: 'circle-slash' };
     case 'runtime': {
       if (snapshot.runtime.building) {return { label: 'Building…', icon: 'sync~spin' };}
       const sha = snapshot.runtime.installedSha;
@@ -179,9 +179,10 @@ function sectionChildren(section: SectionId, snapshot: AppSnapshot): TreeNode[] 
     case 'plugin': {
       const p = snapshot.plugin;
       return [
-        item('plugin.path', 'Path', p.pluginPath ?? (p.installed ? undefined : 'Not installed')),
-        cmd('plugin.install', 'Install plugin', 'figmaMcpBridge.installPlugin', 'repo-clone', 'figmaMcp.plugin.install'),
-        cmd('plugin.uninstall', 'Uninstall plugin', 'figmaMcpBridge.uninstallPlugin', 'trash', 'figmaMcp.plugin.uninstall'),
+        item('plugin.path', 'Path', p.pluginPath ?? (p.installed ? undefined : 'Not built')),
+        cmd('plugin.install', p.installed ? 'Rebuild plugin' : 'Build plugin', 'figmaMcpBridge.installPlugin', 'tools', 'figmaMcp.plugin.install'),
+        cmd('plugin.copyManifest', 'Copy manifest path (for Figma import)', 'figmaMcpBridge.copyPluginManifestPath', 'copy', 'figmaMcp.plugin.copyManifest'),
+        cmd('plugin.uninstall', 'Remove built plugin', 'figmaMcpBridge.uninstallPlugin', 'trash', 'figmaMcp.plugin.uninstall'),
         cmd('plugin.open', 'Open folder', 'figmaMcpBridge.openPluginFolder', 'folder-opened', 'figmaMcp.plugin.open'),
         cmd('plugin.refresh', 'Refresh status', 'figmaMcpBridge.refreshPluginStatus', 'search', 'figmaMcp.plugin.refresh'),
       ];

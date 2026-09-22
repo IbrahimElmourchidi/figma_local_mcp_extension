@@ -5,7 +5,7 @@
   "version": "0.1.0",
   "publisher": "ibrahimelmourchidi",
   "license": "MIT",
-  "icon": "images/icon.png",
+  "icon": "images/utaIcon.png",
   "engines": {
     "vscode": "^1.101.0"
   },
@@ -24,6 +24,12 @@
   "extensionKind": [
     "ui"
   ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "This extension spawns a local bridge server and can download and execute code (a managed Node.js runtime and an on-device build of the figma-mcp-free source)."
+    }
+  },
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -128,12 +134,17 @@
       },
       {
         "command": "figmaMcpBridge.installPlugin",
-        "title": "Install Figma Plugin",
-        "icon": "$(repo-clone)"
+        "title": "Build Figma Plugin",
+        "icon": "$(tools)"
+      },
+      {
+        "command": "figmaMcpBridge.copyPluginManifestPath",
+        "title": "Copy Figma Plugin Manifest Path",
+        "icon": "$(copy)"
       },
       {
         "command": "figmaMcpBridge.uninstallPlugin",
-        "title": "Uninstall Figma Plugin",
+        "title": "Remove Built Figma Plugin",
         "icon": "$(trash)"
       },
       {
@@ -260,10 +271,6 @@
           "when": "false"
         },
         {
-          "command": "figmaMcpBridge.installPlugin",
-          "when": "false"
-        },
-        {
           "command": "figmaMcpBridge.uninstallPlugin",
           "when": "false"
         },
@@ -320,6 +327,11 @@
           "group": "inline"
         },
         {
+          "command": "figmaMcpBridge.copyPluginManifestPath",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.plugin.copyManifest",
+          "group": "inline"
+        },
+        {
           "command": "figmaMcpBridge.buildFromSource",
           "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.runtime.build",
           "group": "inline"
@@ -369,6 +381,7 @@
           "default": 3845,
           "minimum": 1,
           "maximum": 65535,
+          "scope": "machine",
           "description": "Port the bridge server listens on. Must match the Figma plugin's devAllowedDomains."
         },
         "figmaMcpBridge.host": {
@@ -379,11 +392,13 @@
             "localhost",
             "::1"
           ],
+          "scope": "machine",
           "description": "Host the bridge server binds to."
         },
         "figmaMcpBridge.autoStart": {
           "type": "boolean",
           "default": false,
+          "scope": "machine",
           "description": "Automatically start the bridge server when VS Code activates this extension."
         },
         "figmaMcpBridge.mcpServerPath": {
@@ -407,6 +422,7 @@
         "figmaMcpBridge.figmaPluginId": {
           "type": "string",
           "default": "",
+          "scope": "machine",
           "description": "Override the Figma plugin manifest's id. Leave empty to use the bundled default."
         },
         "figmaMcpBridge.autoCheckUpdates": {
@@ -439,7 +455,7 @@
     "compile": "npm run check-types && npm run lint && node esbuild.js",
     "watch": "node esbuild.js --watch",
     "watch:types": "tsc --noEmit --watch",
-    "package": "npm run check-types && npm run lint && node esbuild.js --production",
+    "package": "npm run verify-seed && npm run check-types && npm run lint && node esbuild.js --production",
     "check-types": "tsc --noEmit",
     "lint": "eslint src test",
     "sync-runtime": "node tool/build-runtime.mjs",
@@ -447,13 +463,14 @@
     "pretest:integration": "npm run compile-tests && npm run compile",
     "test:integration": "vscode-test",
     "test:unit": "vitest run",
-    "test": "npm run test:unit && npm run test:integration"
+    "test": "npm run test:unit && npm run test:integration",
+    "verify-seed": "node tool/verify-seed.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",
     "@types/mocha": "^10.0.9",
     "@types/node": "^20.17.9",
-    "@types/vscode": "^1.101.0",
+    "@types/vscode": "1.101.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
     "esbuild": "^0.24.0",

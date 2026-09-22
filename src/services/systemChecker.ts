@@ -1,11 +1,7 @@
 import { spawn } from 'node:child_process';
-import * as fs from 'node:fs';
 import * as net from 'node:net';
-import * as path from 'node:path';
 import { MIN_NODE_VERSION, RECOMMENDED_NODE_VERSION } from '../constants';
 import { probeHealth } from './health';
-import { figmaDevelopmentDirCandidates } from './pluginManager';
-import { PLUGIN_INSTALL_DIR_NAME } from '../constants';
 import { StateStore, SystemRequirementSnapshot } from './state';
 import { NodeResolver } from './nodeResolver';
 
@@ -16,7 +12,10 @@ export interface CheckContext {
 }
 
 export class SystemChecker {
-  constructor(private readonly state: StateStore) {}
+  constructor(
+    private readonly state: StateStore,
+    private readonly pluginStatus: () => { installed: boolean; pluginPath?: string } = () => ({ installed: false }),
+  ) {}
 
   async checkAll(context: CheckContext): Promise<SystemRequirementSnapshot[]> {
     this.state.updateSystem({ checking: true });
@@ -104,18 +103,15 @@ export class SystemChecker {
   }
 
   private checkPlugin(): SystemRequirementSnapshot {
-    for (const devDir of figmaDevelopmentDirCandidates()) {
-      const pluginDir = path.join(devDir, PLUGIN_INSTALL_DIR_NAME);
-      const manifest = path.join(pluginDir, 'manifest.json');
-      if (fs.existsSync(manifest)) {
-        return { id: 'plugin', title: 'Figma plugin', met: true, detail: pluginDir };
-      }
+    const { installed, pluginPath } = this.pluginStatus();
+    if (installed && pluginPath) {
+      return { id: 'plugin', title: 'Figma plugin', met: true, detail: `Built at ${pluginPath}` };
     }
     return {
       id: 'plugin',
       title: 'Figma plugin',
       met: false,
-      detail: 'Not installed — run Install plugin',
+      detail: 'Not built — run Build Figma Plugin, then import its manifest in Figma',
     };
   }
 }

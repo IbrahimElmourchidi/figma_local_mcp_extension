@@ -124,7 +124,29 @@ function renameOrCopy(src: string, dest: string): void {
   }
 }
 
+/** Cheap fingerprint of the seed dir (sizes + mtimes) — changes whenever a file is edited. */
+function seedSignature(dir: string, manifest: RuntimeManifest | null): string {
+  const rels = [MANIFEST_FILE, VERSION_FILE, ...Object.keys(manifest?.files ?? {})];
+  return rels
+    .map((rel) => {
+      try {
+        const st = fs.statSync(fspath.join(dir, ...rel.split('/')));
+        return `${rel}:${st.size}:${st.mtimeMs}`;
+      } catch {
+        return `${rel}:missing`;
+      }
+    })
+    .join('|');
+}
+
 export class RuntimeStore {
+  /**
+   * Last failed seed attempt, keyed by seed fingerprint. ensureInstalled() is
+   * called on hot paths (every MCP provider query), so a corrupt seed must not
+   * be re-copied and re-hashed each time — it fails fast until the seed changes.
+   */
+  private seedFailure: { signature: string; error: BridgeError } | null = null;
+
   constructor(
     private readonly layout: StorageLayout,
     private readonly seedPath: string,
@@ -160,7 +182,19 @@ export class RuntimeStore {
         manifestNeedsUpgrade(installedManifest, seedManifest);
 
       if (needsInstall) {
-        this.seedIntoRuntime();
+        const signature = seedSignature(this.seedPath, seedManifest);
+        if (this.seedFailure?.signature === signature) {
+          throw this.seedFailure.error;
+        }
+        try {
+          this.seedIntoRuntime();
+          this.seedFailure = null;
+        } catch (error) {
+          const bridgeError =
+            error instanceof BridgeError ? error : new BridgeError('unexpected', String(error));
+          this.seedFailure = { signature, error: bridgeError };
+          throw bridgeError;
+        }
       }
       return this.layout.runtime;
     });
@@ -174,7 +208,17 @@ export class RuntimeStore {
 
     const stagedManifest = readManifestDir(staging);
     if (stagedManifest && Object.keys(stagedManifest.files).length > 0) {
-      verifyRuntimeFiles(staging, stagedManifest);
+      try {
+        verifyRuntimeFiles(staging, stagedManifest);
+      } catch (error) {
+        removeDir(staging);
+        const detail = error instanceof Error ? error.message : String(error);
+        throw new BridgeError(
+          'checksum_mismatch',
+          `Bundled runtime seed failed its integrity check (${detail}). ` +
+            'Reinstall the extension or run "Build from source".',
+        );
+      }
     }
 
     this.swapStaging(staging);
@@ -309,7 +353,17 @@ function manifestNeedsUpgrade(installed: RuntimeManifest, seed: RuntimeManifest)
   if (a === b) {
     return false;
   }
-  // Seed is a concrete newer sha than the unknown/empty installed one, or shas differ:
-  // prefer the seed shipped with the current VSIX (VSIX upgrades must win).
+  // Shas differ. Without this check an on-device "Build from source" (newer
+  // upstream commit) would be clobbered by the older VSIX seed on every
+  // activation. Only a seed with a strictly newer upstream commit wins.
+  const installedAt = Date.parse(installed.upstreamCommittedAt ?? '');
+  const seedAt = Date.parse(seed.upstreamCommittedAt ?? '');
+  if (Number.isFinite(installedAt) && Number.isFinite(seedAt)) {
+    return seedAt > installedAt;
+  }
+  if (installed.builtBy === 'on-device') {
+    return false;
+  }
+  // No dates to compare (legacy VERSION-only install): prefer the VSIX seed.
   return true;
 }

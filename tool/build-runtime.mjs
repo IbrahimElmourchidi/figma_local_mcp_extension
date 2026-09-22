@@ -75,23 +75,78 @@ function readTarString(header, start, length) {
   return slice.subarray(0, end >= 0 ? end : slice.length).toString('utf8');
 }
 
+function parsePaxPath(raw) {
+  // PAX extended-header record blob: "<len> <key>=<value>\n" repeated.
+  let offset = 0;
+  while (offset < raw.length) {
+    const spaceIdx = raw.indexOf(' ', offset);
+    if (spaceIdx === -1) break;
+    const len = parseInt(raw.slice(offset, spaceIdx), 10);
+    if (!Number.isFinite(len) || len <= 0) break;
+    const record = raw.slice(offset, offset + len);
+    const eqIdx = record.indexOf('=');
+    if (eqIdx !== -1) {
+      const key = record.slice(spaceIdx - offset + 1, eqIdx);
+      if (key === 'path') return record.slice(eqIdx + 1).replace(/\n$/, '');
+    }
+    offset += len;
+  }
+  return null;
+}
+
 function extractTarGz(buffer, destDir) {
   const tarBuffer = gunzipSync(buffer);
   fs.mkdirSync(destDir, { recursive: true });
   let offset = 0;
   let count = 0;
+  // GNU long name ('L') / PAX extended header ('x') describe the *next*
+  // header — needed for paths over ustar's 100+155-byte name+prefix fields.
+  // 'g' (PAX global, e.g. codeload's leading pax_global_header) and 'K'
+  // (GNU long link) are consumed and discarded; links are never followed.
+  let pendingLongName = null;
+  let pendingPaxPath = null;
+
   while (offset + 512 <= tarBuffer.length) {
     const header = tarBuffer.subarray(offset, offset + 512);
     const name = readTarString(header, 0, 100);
+    const typeFlag = String.fromCharCode(header[156]);
+    if (name.length === 0 && typeFlag === '\0') break;
+
     const prefix = readTarString(header, 345, 155);
-    const fullEntry = prefix ? `${prefix}/${name}` : name;
     const sizeOctal = readTarString(header, 124, 12).trim();
     const size = sizeOctal ? parseInt(sizeOctal, 8) : 0;
-    const typeFlag = String.fromCharCode(header[156]);
     const dataStart = offset + 512;
     const dataEnd = dataStart + size;
+    const nextOffset = dataStart + Math.ceil(size / 512) * 512;
 
-    if (fullEntry.length === 0 && typeFlag === '\0') break;
+    if (typeFlag === 'L') {
+      pendingLongName = tarBuffer.subarray(dataStart, dataEnd).toString('utf8').replace(/\0+$/, '');
+      offset = nextOffset;
+      continue;
+    }
+    if (typeFlag === 'K') {
+      offset = nextOffset;
+      continue;
+    }
+    if (typeFlag === 'x' || typeFlag === 'g') {
+      if (typeFlag === 'x') {
+        const paxPath = parsePaxPath(tarBuffer.subarray(dataStart, dataEnd).toString('utf8'));
+        if (paxPath) pendingPaxPath = paxPath;
+      }
+      offset = nextOffset;
+      continue;
+    }
+
+    let fullEntry;
+    if (pendingLongName !== null) {
+      fullEntry = pendingLongName;
+      pendingLongName = null;
+    } else if (pendingPaxPath !== null) {
+      fullEntry = pendingPaxPath;
+      pendingPaxPath = null;
+    } else {
+      fullEntry = prefix ? `${prefix}/${name}` : name;
+    }
 
     if (typeFlag === '0' || typeFlag === '\0') {
       const safe = safeEntryPath(fullEntry);
@@ -108,7 +163,7 @@ function extractTarGz(buffer, destDir) {
     }
     // symlink/hardlink ('1'/'2') skipped
 
-    offset = dataStart + Math.ceil(size / 512) * 512;
+    offset = nextOffset;
   }
   return count;
 }
@@ -437,6 +492,15 @@ async function main() {
       files,
     };
     await fsp.writeFile(path.join(outDir, 'runtime.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+
+    // Normalize perms regardless of the umask this script ran under — these
+    // are data files (always invoked as `node <path>` / read as text, never
+    // executed directly), and a VSIX-bundled asset shouldn't ship world-writable.
+    if (process.platform !== 'win32') {
+      for (const rel of [...Object.keys(files), 'VERSION', 'runtime.json']) {
+        await fsp.chmod(path.join(outDir, rel), 0o644);
+      }
+    }
 
     if (!args.skipVerify) {
       await verifyRuntime(outDir);

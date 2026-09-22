@@ -98,9 +98,15 @@ export const window = {
   showWarningMessage: async (..._args: unknown[]) => undefined,
   showErrorMessage: async (..._args: unknown[]) => undefined,
   showInputBox: async (..._args: unknown[]) => undefined,
-  createOutputChannel: (_name: string) => ({
+  createOutputChannel: (_name: string, _options?: { log: true }) => ({
     appendLine: (_line: string) => {},
+    trace: (_message: string) => {},
+    debug: (_message: string) => {},
+    info: (_message: string) => {},
+    warn: (_message: string) => {},
+    error: (_message: string | Error) => {},
     show: (_preserveFocus?: boolean) => {},
+    clear: () => {},
     dispose: () => {},
   }),
   createStatusBarItem: (_align?: number, _prio?: number) => ({

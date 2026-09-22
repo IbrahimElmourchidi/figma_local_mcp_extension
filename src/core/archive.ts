@@ -84,24 +84,60 @@ export function extractTar(buffer: Buffer, destDir: string): number {
   fs.mkdirSync(destDir, { recursive: true });
   let offset = 0;
   let count = 0;
+  // GNU long name ('L') and PAX extended header ('x') entries describe the
+  // *next* header rather than being real files themselves — needed for any
+  // path exceeding ustar's 100+155-byte name+prefix fields. 'g' (PAX global,
+  // e.g. codeload's leading pax_global_header) and 'K' (GNU long link) are
+  // consumed and discarded; we never follow links.
+  let pendingLongName: string | null = null;
+  let pendingPaxPath: string | null = null;
 
   while (offset + 512 <= buffer.length) {
     const header = buffer.subarray(offset, offset + 512);
     const name = readTarString(header, 0, 100);
-    if (name.length === 0) {
-      // Possible end-of-archive (two zero blocks) or ustar long name handling.
-      const typeFlag = String.fromCharCode(header[156]);
-      if (typeFlag === '\0') {
-        break;
-      }
+    const typeFlag = String.fromCharCode(header[156]);
+    if (name.length === 0 && typeFlag === '\0') {
+      // Two all-zero blocks mark end-of-archive.
+      break;
     }
+
     const prefix = readTarString(header, 345, 155);
-    const fullEntry = prefix ? `${prefix}/${name}` : name;
     const sizeOctal = readTarString(header, 124, 12).trim();
     const size = sizeOctal ? parseInt(sizeOctal, 8) : 0;
-    const typeFlag = String.fromCharCode(header[156]);
     const dataStart = offset + 512;
     const dataEnd = dataStart + size;
+    const nextOffset = dataStart + Math.ceil(size / 512) * 512;
+
+    if (typeFlag === 'L') {
+      pendingLongName = buffer.subarray(dataStart, dataEnd).toString('utf8').replace(/\0+$/, '');
+      offset = nextOffset;
+      continue;
+    }
+    if (typeFlag === 'K') {
+      offset = nextOffset;
+      continue;
+    }
+    if (typeFlag === 'x' || typeFlag === 'g') {
+      if (typeFlag === 'x') {
+        const paxPath = parsePaxPath(buffer.subarray(dataStart, dataEnd).toString('utf8'));
+        if (paxPath) {
+          pendingPaxPath = paxPath;
+        }
+      }
+      offset = nextOffset;
+      continue;
+    }
+
+    let fullEntry: string;
+    if (pendingLongName !== null) {
+      fullEntry = pendingLongName;
+      pendingLongName = null;
+    } else if (pendingPaxPath !== null) {
+      fullEntry = pendingPaxPath;
+      pendingPaxPath = null;
+    } else {
+      fullEntry = prefix ? `${prefix}/${name}` : name;
+    }
 
     if (typeFlag === '0' || typeFlag === '\0') {
       const safe = safeEntryPath(fullEntry);
@@ -118,12 +154,34 @@ export function extractTar(buffer: Buffer, destDir: string): number {
     }
     // '1'/'2' hard/sym links skipped (plan: reject symlink entries)
 
-    offset = dataStart + Math.ceil(size / 512) * 512;
-    if (size === 0 && fullEntry.length === 0 && typeFlag === '\0') {
-      break;
-    }
+    offset = nextOffset;
   }
   return count;
+}
+
+/** Parse a PAX extended-header record blob (`"<len> <key>=<value>\n"`*) for `path`. */
+function parsePaxPath(raw: string): string | null {
+  let offset = 0;
+  while (offset < raw.length) {
+    const spaceIdx = raw.indexOf(' ', offset);
+    if (spaceIdx === -1) {
+      break;
+    }
+    const len = parseInt(raw.slice(offset, spaceIdx), 10);
+    if (!Number.isFinite(len) || len <= 0) {
+      break;
+    }
+    const record = raw.slice(offset, offset + len);
+    const eqIdx = record.indexOf('=');
+    if (eqIdx !== -1) {
+      const key = record.slice(spaceIdx - offset + 1, eqIdx);
+      if (key === 'path') {
+        return record.slice(eqIdx + 1).replace(/\n$/, '');
+      }
+    }
+    offset += len;
+  }
+  return null;
 }
 
 function readTarString(header: Buffer, start: number, length: number): string {

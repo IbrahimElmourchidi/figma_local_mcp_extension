@@ -3,6 +3,7 @@ import * as path from 'node:path';
 import { ENV_BRIDGE_TOKEN } from '../constants';
 import { BridgeError } from '../errors';
 import { probeHealth } from './health';
+import { ResolvedNode, scriptArgs } from './nodeResolver';
 
 const SMOKE_TOKEN = 'runtime-verifier-smoke-token-0123456789abcdef';
 
@@ -13,26 +14,24 @@ const SMOKE_TOKEN = 'runtime-verifier-smoke-token-0123456789abcdef';
  */
 export async function verifyRuntimeBundle(
   runtimeDir: string,
-  nodeCommand: string,
-  nodeEnv: NodeJS.ProcessEnv,
+  node: Pick<ResolvedNode, 'command' | 'env' | 'launcher'>,
   log: (line: string) => void = () => {},
 ): Promise<void> {
   const mcpPath = path.join(runtimeDir, 'mcp-server.cjs');
   const bridgePath = path.join(runtimeDir, 'bridge-cli.cjs');
 
   log('Verifier: MCP initialize…');
-  await verifyMcpInitialize(mcpPath, nodeCommand, nodeEnv);
+  await verifyMcpInitialize(mcpPath, node);
 
   log('Verifier: bridge /health 401/200…');
-  await verifyBridgeHealth(bridgePath, nodeCommand, nodeEnv);
+  await verifyBridgeHealth(bridgePath, node);
 
   log('Verifier: passed');
 }
 
 async function verifyMcpInitialize(
   mcpPath: string,
-  nodeCommand: string,
-  nodeEnv: NodeJS.ProcessEnv,
+  node: Pick<ResolvedNode, 'command' | 'env' | 'launcher'>,
 ): Promise<void> {
   const init = `${JSON.stringify({
     jsonrpc: '2.0',
@@ -46,8 +45,8 @@ async function verifyMcpInitialize(
   })}\n`;
 
   const output = await new Promise<string>((resolve, reject) => {
-    const child = spawn(nodeCommand, [mcpPath], {
-      env: { ...nodeEnv, [ENV_BRIDGE_TOKEN]: SMOKE_TOKEN },
+    const child = spawn(node.command, scriptArgs(node, mcpPath), {
+      env: { ...node.env, [ENV_BRIDGE_TOKEN]: SMOKE_TOKEN },
       stdio: ['pipe', 'pipe', 'pipe'],
       windowsHide: true,
     });
@@ -87,15 +86,14 @@ async function verifyMcpInitialize(
 
 async function verifyBridgeHealth(
   bridgePath: string,
-  nodeCommand: string,
-  nodeEnv: NodeJS.ProcessEnv,
+  node: Pick<ResolvedNode, 'command' | 'env' | 'launcher'>,
 ): Promise<void> {
   const port = 18845 + Math.floor(Math.random() * 2000);
   const bridge = spawn(
-    nodeCommand,
-    [bridgePath, 'serve', '--host', '127.0.0.1', '--port', String(port)],
+    node.command,
+    scriptArgs(node, bridgePath, ['serve', '--host', '127.0.0.1', '--port', String(port)]),
     {
-      env: { ...nodeEnv, [ENV_BRIDGE_TOKEN]: SMOKE_TOKEN },
+      env: { ...node.env, [ENV_BRIDGE_TOKEN]: SMOKE_TOKEN },
       stdio: ['ignore', 'pipe', 'pipe'],
       windowsHide: true,
     },

@@ -4,8 +4,10 @@ import * as vscode from 'vscode';
 import { ENV_BRIDGE_TOKEN, OUTPUT_LOG_RING, VALID_HOSTS } from '../constants';
 import { BridgeError, runCommand } from '../errors';
 import { StorageLayout } from '../core/paths';
+import { withLockAsync } from '../core/lock';
 import { RuntimeStore } from './runtimeStore';
-import { NodeResolver } from './nodeResolver';
+import { NodeResolver, scriptArgs } from './nodeResolver';
+import { redactToken } from '../util/redact';
 import { StateStore } from './state';
 import { OutputChannels } from '../ui/output';
 import { probeHealth, waitForHealth } from './health';
@@ -16,7 +18,6 @@ const HEALTH_GATE_MS = 8000;
 export interface StartOptions {
   readonly config: BridgeConfig;
   readonly token: string;
-  readonly killExisting?: boolean;
 }
 
 export class BridgeService implements vscode.Disposable {
@@ -62,131 +63,139 @@ export class BridgeService implements vscode.Disposable {
         pid: undefined,
       });
 
-      if (options.killExisting !== false) {
-        await this.killOrphans(config.port);
-      }
+      // Cross-process lock spans probe → spawn → health-gate (not just install/
+      // build like RuntimeStore's lock) so two VS Code windows racing to start
+      // the same port resolve deterministically instead of one hitting
+      // EADDRINUSE. No automatic orphan-kill here: a process holding the port
+      // may be a sibling window's own healthy, adopted bridge — only the
+      // explicit "Kill Orphan Bridges" command may terminate an inferred PID.
+      await withLockAsync(this.layout.locks, `bridge-start-${config.port}`, () =>
+        this.startLocked(config, token),
+      );
+    });
+  }
 
-      // Adopt-external: healthy bridge already on the port with our token.
-      const existing = await probeHealth(config.host, config.port, token, 1500);
-      if (existing.ok) {
-        this.adoptExternal(config, token, existing.sessionId);
-        return;
-      }
+  private async startLocked(config: BridgeConfig, token: string): Promise<void> {
+    // Adopt-external: healthy bridge already on the port with our token.
+    const existing = await probeHealth(config.host, config.port, token, 1500);
+    if (existing.ok) {
+      this.adoptExternal(config, token, existing.sessionId);
+      return;
+    }
 
-      // Refuse if something else is bound (not our token).
-      const foreign = await probeHealth(config.host, config.port, undefined, 500);
-      if (foreign.ok || (foreign.status !== undefined && foreign.status !== 401)) {
-        if (foreign.status === 401 || foreign.ok) {
-          // 401 means a bridge is there but token mismatch / no token probe
-          const withToken = await probeHealth(config.host, config.port, token, 500);
-          if (withToken.ok) {
-            this.adoptExternal(config, token, withToken.sessionId);
-            return;
-          }
-          throw new BridgeError(
-            'port_in_use',
-            `Port ${config.port} is in use by another bridge (token mismatch). Stop it or change the port.`,
-          );
-        }
-      }
-
-      const serverPath = this.runtime.getBridgeCliPath();
-      const node = await this.nodes.resolveForServers();
-      const host = (VALID_HOSTS as readonly string[]).includes(config.host) ? config.host : '127.0.0.1';
-
-      const args = [serverPath, 'serve', '--host', host, '--port', String(config.port)];
-      const env: NodeJS.ProcessEnv = { ...node.env, [ENV_BRIDGE_TOKEN]: token };
-
-      this.appendLog(`$ ${node.command} ${args.join(' ')}`);
-      const child = spawn(node.command, args, {
-        env,
-        stdio: ['ignore', 'pipe', 'pipe'],
-        windowsHide: true,
-      });
-      this.child = child;
-
-      if (child.pid) {
-        this.state.updateBridge({ pid: child.pid });
-      }
-
-      const attach = (stream: NodeJS.ReadableStream, isError: boolean) => {
-        const rl = readline.createInterface({ input: stream });
-        rl.on('line', (line) => {
-          this.appendLog(isError ? `[ERROR] ${line}` : line);
-          if (!isError) {
-            const match = /Session:\s*(\S+)/.exec(line);
-            if (match) {
-              this.state.updateBridge({ sessionId: match[1] });
-            }
-          }
-        });
-      };
-      if (child.stdout) {attach(child.stdout, false);}
-      if (child.stderr) {attach(child.stderr, true);}
-
-      child.on('error', (error) => {
-        this.appendLog(`[ERROR] ${error.message}`);
-        this.state.updateBridge({
-          status: 'error',
-          errorMessage: error.message,
-          startedAt: undefined,
-        });
-        this.stopUptime();
-        this.child = null;
-      });
-
-      child.on('close', (code) => {
-        const clean = this.intentionalStop || code === 0 || code === -15 || code === null;
-        this.intentionalStop = false;
-        this.child = null;
-        this.stopUptime();
-        if (this.disposed) {
+    // Refuse if something else is bound (not our token).
+    const foreign = await probeHealth(config.host, config.port, undefined, 500);
+    if (foreign.ok || (foreign.status !== undefined && foreign.status !== 401)) {
+      if (foreign.status === 401 || foreign.ok) {
+        // 401 means a bridge is there but token mismatch / no token probe
+        const withToken = await probeHealth(config.host, config.port, token, 500);
+        if (withToken.ok) {
+          this.adoptExternal(config, token, withToken.sessionId);
           return;
         }
-        this.state.updateBridge({
-          status: clean ? 'stopped' : 'error',
-          errorMessage: clean ? undefined : `Process exited with code ${code}`,
-          startedAt: clean ? undefined : this.state.get().bridge.startedAt,
-          pid: undefined,
-        });
-      });
-
-      // Health gate — only report Running after /health 200.
-      const health = await waitForHealth(config.host, config.port, token, HEALTH_GATE_MS);
-      if (!health.ok) {
-        // Process may have died already
-        if (this.child && this.child.exitCode === null) {
-          this.appendLog(`Health gate failed: ${health.error ?? 'no response'} — stopping process`);
-          this.intentionalStop = true;
-          this.child.kill('SIGTERM');
-          setTimeout(() => this.child?.kill('SIGKILL'), 2000).unref();
-        }
-        const still = this.state.get().bridge;
-        if (still.status !== 'error') {
-          this.state.updateBridge({
-            status: 'error',
-            errorMessage: `Bridge did not become healthy: ${health.error ?? 'timeout'}`,
-            startedAt: undefined,
-          });
-        }
         throw new BridgeError(
-          'health_gate_failed',
-          `Bridge did not become healthy within ${HEALTH_GATE_MS}ms: ${health.error ?? 'timeout'}`,
+          'port_in_use',
+          `Port ${config.port} is in use by another bridge (token mismatch). Stop it or change the port.`,
         );
       }
+    }
 
-      this.state.updateBridge({
-        status: 'running',
-        host: config.host,
-        port: config.port,
-        token,
-        sessionId: health.sessionId ?? this.state.get().bridge.sessionId,
-        startedAt: Date.now(),
-        errorMessage: undefined,
-      });
-      this.startUptime();
-      this.appendLog(`Bridge healthy on ${config.host}:${config.port}`);
+    const serverPath = this.runtime.getBridgeCliPath();
+    const node = await this.nodes.resolveForServers();
+    const host = (VALID_HOSTS as readonly string[]).includes(config.host) ? config.host : '127.0.0.1';
+
+    const args = scriptArgs(node, serverPath, ['serve', '--host', host, '--port', String(config.port)]);
+    const env: NodeJS.ProcessEnv = { ...node.env, [ENV_BRIDGE_TOKEN]: token };
+
+    this.appendLog(`$ ${node.command} ${args.join(' ')}`);
+    const child = spawn(node.command, args, {
+      env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      windowsHide: true,
     });
+    this.child = child;
+
+    if (child.pid) {
+      this.state.updateBridge({ pid: child.pid });
+    }
+
+    const attach = (stream: NodeJS.ReadableStream, isError: boolean) => {
+      const rl = readline.createInterface({ input: stream });
+      rl.on('line', (line) => {
+        this.appendLog(isError ? `[ERROR] ${line}` : line);
+        if (!isError) {
+          const match = /Session:\s*(\S+)/.exec(line);
+          if (match) {
+            this.state.updateBridge({ sessionId: match[1] });
+          }
+        }
+      });
+    };
+    if (child.stdout) {attach(child.stdout, false);}
+    if (child.stderr) {attach(child.stderr, true);}
+
+    child.on('error', (error) => {
+      this.appendLog(`[ERROR] ${error.message}`);
+      this.state.updateBridge({
+        status: 'error',
+        errorMessage: error.message,
+        startedAt: undefined,
+      });
+      this.stopUptime();
+      this.child = null;
+    });
+
+    child.on('close', (code) => {
+      const clean = this.intentionalStop || code === 0 || code === -15 || code === null;
+      this.intentionalStop = false;
+      this.child = null;
+      this.stopUptime();
+      if (this.disposed) {
+        return;
+      }
+      this.state.updateBridge({
+        status: clean ? 'stopped' : 'error',
+        errorMessage: clean ? undefined : `Process exited with code ${code}`,
+        startedAt: clean ? undefined : this.state.get().bridge.startedAt,
+        pid: undefined,
+      });
+    });
+
+    // Health gate — only report Running after /health 200.
+    const health = await waitForHealth(config.host, config.port, token, HEALTH_GATE_MS);
+    if (!health.ok) {
+      // Process may have died already
+      if (this.child && this.child.exitCode === null) {
+        this.appendLog(`Health gate failed: ${health.error ?? 'no response'} — stopping process`);
+        this.intentionalStop = true;
+        this.child.kill('SIGTERM');
+        setTimeout(() => this.child?.kill('SIGKILL'), 2000).unref();
+      }
+      const still = this.state.get().bridge;
+      if (still.status !== 'error') {
+        this.state.updateBridge({
+          status: 'error',
+          errorMessage: `Bridge did not become healthy: ${health.error ?? 'timeout'}`,
+          startedAt: undefined,
+        });
+      }
+      throw new BridgeError(
+        'health_gate_failed',
+        `Bridge did not become healthy within ${HEALTH_GATE_MS}ms: ${health.error ?? 'timeout'}`,
+      );
+    }
+
+    this.state.updateBridge({
+      status: 'running',
+      host: config.host,
+      port: config.port,
+      token,
+      sessionId: health.sessionId ?? this.state.get().bridge.sessionId,
+      startedAt: Date.now(),
+      errorMessage: undefined,
+    });
+    this.startUptime();
+    this.appendLog(`Bridge healthy on ${config.host}:${config.port}`);
   }
 
   private adoptExternal(config: BridgeConfig, token: string, sessionId?: string): void {
@@ -231,10 +240,9 @@ export class BridgeService implements vscode.Disposable {
       }
       this.child = null;
       this.stopUptime();
-      const port = this.state.get().bridge.port ?? 0;
-      if (port > 0) {
-        await this.killOrphans(port);
-      }
+      // No automatic orphan-kill: our own child is confirmed dead above, and a
+      // process still on the port afterward could be a sibling window's bridge
+      // that just started its own — only the explicit command may kill it.
       this.intentionalStop = false;
       this.state.updateBridge({
         status: 'stopped',
@@ -290,7 +298,10 @@ export class BridgeService implements vscode.Disposable {
     this.state.updateBridge({ logs: [] });
   }
 
-  private appendLog(line: string): void {
+  private appendLog(raw: string): void {
+    // bridge-cli echoes "Pairing token (sensitive): <token>" on startup, and
+    // the Output channel is persisted to VS Code's log files on disk.
+    const line = redactToken(raw, this.currentToken);
     this.logs = [...this.logs, line].slice(-OUTPUT_LOG_RING);
     this.output.appendBridge(line);
     this.state.updateBridge({ logs: this.logs });

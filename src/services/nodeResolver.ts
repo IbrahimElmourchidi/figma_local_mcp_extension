@@ -11,11 +11,24 @@ export interface ResolvedNode {
   readonly env: NodeJS.ProcessEnv;
   readonly via: 'electron' | 'override' | 'system' | 'managed';
   readonly version?: string;
+  /**
+   * Wrapper script to run in front of the target script (Electron only). See
+   * resources/electron-node-launcher.cjs — without it, commander-based CLIs
+   * misparse argv under ELECTRON_RUN_AS_NODE.
+   */
+  readonly launcher?: string;
 }
 
 export interface NodeResolverOptions {
   readonly overridePath?: string;
   readonly layout: StorageLayout;
+  /** Absolute path to resources/electron-node-launcher.cjs. */
+  readonly launcherPath?: string;
+}
+
+/** argv for running `script` with `node`, inserting the Electron launcher when needed. */
+export function scriptArgs(node: Pick<ResolvedNode, 'launcher'>, script: string, args: readonly string[] = []): string[] {
+  return node.launcher ? [node.launcher, script, ...args] : [script, ...args];
 }
 
 /**
@@ -40,6 +53,7 @@ export class NodeResolver {
       env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' },
       via: 'electron',
       version: process.versions.node,
+      launcher: this.options.launcherPath,
     };
   }
 

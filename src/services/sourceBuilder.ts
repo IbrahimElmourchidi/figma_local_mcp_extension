@@ -267,9 +267,19 @@ export class SourceBuilder {
       };
       await fsp.writeFile(path.join(staging, MANIFEST_FILE), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
 
+      // Normalize perms — these are data files, never executed directly, and
+      // shouldn't inherit an overly-permissive umask into the runtime dir.
+      if (process.platform !== 'win32') {
+        for (const rel of [...Object.keys(files), VERSION_FILE, MANIFEST_FILE]) {
+          await fsp.chmod(path.join(staging, rel), 0o644);
+        }
+      }
+
       // 8. Verify staged output BEFORE swap
       this.deps.state.updateRuntime({ buildStatus: 'Verifying staged runtime…' });
-      await verifyRuntimeBundle(staging, node.command, node.env, log);
+      // Smoke-test with the same Node + launcher the bridge/MCP will actually
+      // run under (usually Electron-as-Node), not the real Node used to build.
+      await verifyRuntimeBundle(staging, await this.deps.nodes.resolveForServers(), log);
       this.throwIfCancelled(token);
 
       // 9. Stage-and-swap (caller should have stopped bridge/MCP already)

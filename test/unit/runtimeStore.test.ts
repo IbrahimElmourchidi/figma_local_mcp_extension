@@ -130,10 +130,75 @@ describe('RuntimeStore', () => {
     expect(store.getInstalledManifest()?.upstreamSha).toBe('sha-new');
   });
 
+  it('keeps a newer on-device build instead of reseeding an older seed', () => {
+    store.ensureInstalled();
+    const runtimeDir = path.join(root, 'data', 'runtime');
+    const staged = path.join(root, 'staged');
+    writeRuntime(staged, 'sha-built');
+    const builtManifest = JSON.parse(fs.readFileSync(path.join(staged, MANIFEST_FILE), 'utf8'));
+    builtManifest.upstreamCommittedAt = '2026-09-20T00:00:00Z';
+    builtManifest.builtBy = 'on-device';
+    fs.writeFileSync(path.join(staged, MANIFEST_FILE), JSON.stringify(builtManifest));
+    store.stageAndSwap(staged);
+
+    const seedManifest = JSON.parse(fs.readFileSync(path.join(seed, MANIFEST_FILE), 'utf8'));
+    seedManifest.upstreamCommittedAt = '2026-09-01T00:00:00Z';
+    fs.writeFileSync(path.join(seed, MANIFEST_FILE), JSON.stringify(seedManifest));
+
+    store.ensureInstalled();
+    expect(store.getInstalledManifest()?.upstreamSha).toBe('sha-built');
+    expect(fs.existsSync(path.join(runtimeDir, MCP_SERVER_FILE))).toBe(true);
+  });
+
+  it('reseeds when the seed has a strictly newer upstream commit', () => {
+    const runtimeDir = path.join(root, 'data', 'runtime');
+    writeRuntime(runtimeDir, 'sha-old');
+    const installed = JSON.parse(fs.readFileSync(path.join(runtimeDir, MANIFEST_FILE), 'utf8'));
+    installed.upstreamCommittedAt = '2026-09-01T00:00:00Z';
+    installed.builtBy = 'on-device';
+    fs.writeFileSync(path.join(runtimeDir, MANIFEST_FILE), JSON.stringify(installed));
+    const seedManifest = JSON.parse(fs.readFileSync(path.join(seed, MANIFEST_FILE), 'utf8'));
+    seedManifest.upstreamCommittedAt = '2026-09-20T00:00:00Z';
+    fs.writeFileSync(path.join(seed, MANIFEST_FILE), JSON.stringify(seedManifest));
+
+    store.ensureInstalled();
+    expect(store.getInstalledManifest()?.upstreamSha).toBe('sha-new');
+  });
+
+  it('fails fast on a corrupt seed, cleans staging, and retries once the seed changes', () => {
+    const cli = path.join(seed, BRIDGE_CLI_FILE);
+    const original = fs.readFileSync(cli, 'utf8');
+    fs.writeFileSync(cli, `\n${original}`);
+
+    expect(() => store.ensureInstalled()).toThrow(/integrity check.*bridge-cli\.cjs/);
+    expect(fs.existsSync(path.join(root, 'data', 'runtime-staging'))).toBe(false);
+
+    // Same corrupt seed → cached failure, no re-copy into staging.
+    expect(() => store.ensureInstalled()).toThrow(/integrity check/);
+    expect(fs.existsSync(path.join(root, 'data', 'runtime-staging'))).toBe(false);
+
+    fs.writeFileSync(cli, original);
+    const future = new Date(Date.now() + 5000);
+    fs.utimesSync(cli, future, future);
+    store.ensureInstalled();
+    expect(store.isHealthy()).toBe(true);
+  });
+
   it('throws when seed missing and nothing installed', () => {
     const layout = createStorageLayout(path.join(root, 'empty'));
     const emptyStore = new RuntimeStore(layout, path.join(root, 'no-seed'));
     expect(() => emptyStore.ensureInstalled()).toThrow(/seed/i);
+  });
+});
+
+describe('committed runtime-seed', () => {
+  // Guards against an accidental editor save (e.g. a stray blank line before
+  // the shebang) shipping a seed that fails verification on every activation.
+  it('matches the hashes in its own runtime.json', () => {
+    const dir = path.resolve(__dirname, '../../runtime-seed');
+    const manifest = parseManifest(fs.readFileSync(path.join(dir, MANIFEST_FILE), 'utf8'));
+    expect(Object.keys(manifest.files).length).toBeGreaterThan(0);
+    expect(() => verifyRuntimeFiles(dir, manifest)).not.toThrow();
   });
 });
 

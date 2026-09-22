@@ -21,13 +21,16 @@ let deactivateHooks: Array<() => void> = [];
 export function activate(context: vscode.ExtensionContext): void {
   const output = new OutputChannels();
   const state = new StateStore();
-  const secrets = new SecretsStore(context.secrets);
   const layout = createStorageLayout(context.globalStorageUri.fsPath);
+  const secrets = new SecretsStore(context.secrets, layout.locks);
   const runtime = new RuntimeStore(layout, seedDir(context.extensionPath));
-  const nodes = new NodeResolver({ layout });
+  const nodes = new NodeResolver({
+    layout,
+    launcherPath: context.asAbsolutePath('resources/electron-node-launcher.cjs'),
+  });
   const bridge = new BridgeService(layout, runtime, nodes, state, output);
-  const plugin = new PluginManager(runtime, state, () => readBridgeConfig());
-  const system = new SystemChecker(state);
+  const plugin = new PluginManager(runtime, state, () => readBridgeConfig(), layout.figmaPlugin);
+  const system = new SystemChecker(state, () => plugin.checkInstallation());
   const builder = new SourceBuilder({ layout, runtime, nodes, state, output });
 
   const config = () => readBridgeConfig();
@@ -82,6 +85,7 @@ export function activate(context: vscode.ExtensionContext): void {
     nodes,
     bridge,
     state,
+    output,
   });
 
   plugin.checkInstallation();

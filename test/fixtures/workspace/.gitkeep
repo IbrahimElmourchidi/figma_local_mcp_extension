@@ -1,0 +1,4 @@
+Empty trusted workspace folder opened by the @vscode/test-cli integration run
+(see .vscode-test.mjs). Its presence matters more than its contents: tests
+that assume a workspace is open (vscode.workspace.isTrusted, configuration
+scope resolution, etc.) run against this instead of the "no folder open" state.

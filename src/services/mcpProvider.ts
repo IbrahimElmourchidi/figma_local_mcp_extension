@@ -3,10 +3,11 @@ import { ENV_BRIDGE_TOKEN, ENV_BRIDGE_URL, ENV_FIGMA_TOKEN } from '../constants'
 import { BridgeConfig } from '../config/bridgeConfig';
 import { SecretsStore } from '../config/secretsStore';
 import { RuntimeStore } from './runtimeStore';
-import { NodeResolver } from './nodeResolver';
+import { NodeResolver, scriptArgs } from './nodeResolver';
 import { BridgeService } from './bridgeService';
 import { StateStore } from './state';
 import { bridgeUrl } from '../util/bridgeUrl';
+import { OutputChannels } from '../ui/output';
 
 const PROVIDER_ID = 'figmaMcpBridge.servers';
 
@@ -22,28 +23,45 @@ export function registerMcpProvider(context: vscode.ExtensionContext, deps: {
   readonly nodes: NodeResolver;
   readonly bridge: BridgeService;
   readonly state: StateStore;
+  readonly output?: OutputChannels;
 }): vscode.Disposable {
   const changed = new vscode.EventEmitter<void>();
+  // provideMcpServerDefinitions runs on every chat submit — log a persistent
+  // failure once, not on every call.
+  let lastProvideError: string | null = null;
 
   const provider: vscode.McpServerDefinitionProvider = {
     onDidChangeMcpServerDefinitions: changed.event,
     provideMcpServerDefinitions: () => {
-      const cfg = deps.config();
-      const mcpPath = deps.runtime.getMcpServerPath(cfg.mcpServerPath || undefined);
-      const node = deps.nodes.resolveElectronNode();
-      const env: Record<string, string | number | null> = {
-        ...flattenEnv(node.env),
-        ELECTRON_RUN_AS_NODE: '1',
-      };
-      const manifest = deps.runtime.getInstalledManifest();
-      const definition = new vscode.McpStdioServerDefinition(
-        'Figma MCP Bridge',
-        node.command,
-        [mcpPath],
-        env,
-        manifest?.upstreamSha,
-      );
-      return [definition];
+      // Must stay side-effect-free and must never throw: VS Code calls this
+      // eagerly (e.g. on every chat submit), and an uninstalled/mid-build
+      // runtime is a normal, common state — not an error worth surfacing here.
+      try {
+        const cfg = deps.config();
+        const mcpPath = deps.runtime.getMcpServerPath(cfg.mcpServerPath || undefined);
+        const node = deps.nodes.resolveElectronNode();
+        const env: Record<string, string | number | null> = {
+          ...flattenEnv(node.env),
+          ELECTRON_RUN_AS_NODE: '1',
+        };
+        const manifest = deps.runtime.getInstalledManifest();
+        const definition = new vscode.McpStdioServerDefinition(
+          'Figma MCP Bridge',
+          node.command,
+          scriptArgs(node, mcpPath),
+          env,
+          manifest?.upstreamSha,
+        );
+        lastProvideError = null;
+        return [definition];
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message !== lastProvideError) {
+          lastProvideError = message;
+          deps.output?.appendBridge(`[WARN] MCP provider: runtime not ready (${message})`);
+        }
+        return [];
+      }
     },
     resolveMcpServerDefinition: async (server) => {
       if (!isStdioDefinition(server)) {

@@ -6,7 +6,7 @@ import { RuntimeStore } from '../services/runtimeStore';
 import { NodeResolver } from '../services/nodeResolver';
 import { StateStore } from '../services/state';
 import { OutputChannels } from '../ui/output';
-import { PluginManager } from '../services/pluginManager';
+import { PluginManager, pluginBridgeUrl } from '../services/pluginManager';
 import { SystemChecker } from '../services/systemChecker';
 import { SourceBuilder } from '../services/sourceBuilder';
 import {
@@ -172,10 +172,42 @@ export function registerAllCommands(deps: CommandDeps): void {
   // --- Plugin ---
   reg('figmaMcpBridge.installPlugin', async () => {
     const cfg = deps.config();
-    const target = await deps.plugin.install(cfg.port);
-    deps.plugin.checkInstallation();
-    void vscode.window.showInformationMessage(`Plugin installed to ${target}. Reload it in Figma desktop.`);
-  }, 'Install plugin');
+    const built = await deps.plugin.install(cfg.port);
+    deps.output.appendBridge(`Figma plugin built: ${built.manifestPath}`);
+    if (built.patches.length > 0) {
+      deps.output.appendBridge(`Figma plugin fixes applied: ${built.patches.join(', ')}`);
+    }
+    const copy = 'Copy manifest path';
+    const token = 'Copy pairing token';
+    const reveal = 'Reveal in file manager';
+    const pick = await vscode.window.showInformationMessage(
+      `Figma plugin built at ${built.manifestPath}. First time only: in Figma desktop choose ` +
+        'Plugins → Development → Import plugin from manifest… and select that file. ' +
+        `Rebuilds update it in place. When you run it, keep the URL ${pluginBridgeUrl(cfg.port)} ` +
+        'and paste the pairing token.',
+      copy,
+      token,
+      reveal,
+    );
+    if (pick === copy) {
+      await vscode.env.clipboard.writeText(built.manifestPath);
+      void vscode.window.showInformationMessage(
+        `Copied ${built.manifestPath} — in Figma's file dialog, press Ctrl+L (Cmd+Shift+G on macOS) and paste.`,
+      );
+    } else if (pick === token) {
+      await vscode.commands.executeCommand('figmaMcpBridge.copyToken');
+    } else if (pick === reveal) {
+      await deps.plugin.openFolder();
+    }
+  }, 'Build Figma plugin');
+
+  reg('figmaMcpBridge.copyPluginManifestPath', async () => {
+    if (!deps.plugin.checkInstallation().installed) {
+      throw new BridgeError('unexpected', 'Plugin has not been built yet. Run "Build Figma Plugin" first.');
+    }
+    await vscode.env.clipboard.writeText(deps.plugin.manifestPath());
+    void vscode.window.showInformationMessage(`Copied ${deps.plugin.manifestPath()}`);
+  }, 'Copy plugin manifest path');
 
   reg('figmaMcpBridge.uninstallPlugin', async () => {
     await deps.plugin.uninstall();
@@ -199,18 +231,38 @@ export function registerAllCommands(deps: CommandDeps): void {
         cancellable: true,
       },
       async (progress, token) => {
-        // Stop services before swap
+        // Stop services before swap; remember what to restore afterward
+        // (success or failure — the bridge shouldn't stay down just because a
+        // rebuild attempt happened).
+        const wasRunning = deps.state.get().bridge.status === 'running';
+        const wasPluginInstalled = deps.state.get().plugin.installed;
         await deps.bridge.stop().catch(() => undefined);
 
-        const result = await deps.builder.buildFromSource(token, (message, percent) => {
-          progress.report({
-            message,
-            ...(percent !== undefined ? { increment: 0 } : {}),
+        try {
+          const result = await deps.builder.buildFromSource(token, (message, percent) => {
+            progress.report({
+              message,
+              ...(percent !== undefined ? { increment: 0 } : {}),
+            });
           });
-        });
-        void vscode.window.showInformationMessage(
-          `Runtime built from source @ ${result.upstreamSha.slice(0, 12)}.`,
-        );
+          void vscode.window.showInformationMessage(
+            `Runtime built from source @ ${result.upstreamSha.slice(0, 12)}.`,
+          );
+          if (wasPluginInstalled) {
+            try {
+              await deps.plugin.install(deps.config().port);
+            } catch (error) {
+              deps.output.appendBuild(`Plugin refresh after build failed: ${String(error)}`);
+            }
+          }
+        } finally {
+          if (wasRunning) {
+            const restartToken = await deps.secrets.getOrCreateBridgePassword();
+            await deps.bridge.start({ config: deps.config(), token: restartToken }).catch((error) => {
+              deps.output.appendBridge(`Restart after build failed: ${String(error)}`);
+            });
+          }
+        }
       },
     );
   }, 'Build from source');

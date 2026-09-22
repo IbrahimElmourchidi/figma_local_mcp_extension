@@ -49,11 +49,79 @@ describe('extractTar', () => {
       fs.rmSync(dest, { recursive: true, force: true });
     }
   });
+
+  it('honors a GNU long-name ("L") header for a path over 100+155 bytes', () => {
+    // ustar's name(100)+prefix(155) fields cap plain paths well under this.
+    const longPath = `${'deep/'.repeat(60)}file.txt`;
+    expect(longPath.length).toBeGreaterThan(255);
+    const tar = buildTar([
+      { name: './@LongLink', data: `${longPath}\0`, typeFlag: 'L' },
+      { name: longPath.slice(0, 99), data: 'gnu-longname-payload', typeFlag: '0' },
+    ]);
+
+    const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'archive-test-'));
+    try {
+      const count = extractTar(tar, dest);
+      expect(count).toBe(1);
+      expect(fs.readFileSync(path.join(dest, longPath), 'utf8')).toBe('gnu-longname-payload');
+    } finally {
+      fs.rmSync(dest, { recursive: true, force: true });
+    }
+  });
+
+  it('honors a PAX extended header ("path" record) for the next entry', () => {
+    const longPath = `${'nested/'.repeat(40)}deep.txt`;
+    expect(longPath.length).toBeGreaterThan(255);
+    const tar = buildTar([
+      { name: 'PaxHeaders/placeholder', data: paxRecord('path', longPath), typeFlag: 'x' },
+      { name: longPath.slice(0, 99), data: 'pax-path-payload', typeFlag: '0' },
+    ]);
+
+    const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'archive-test-'));
+    try {
+      const count = extractTar(tar, dest);
+      expect(count).toBe(1);
+      expect(fs.readFileSync(path.join(dest, longPath), 'utf8')).toBe('pax-path-payload');
+    } finally {
+      fs.rmSync(dest, { recursive: true, force: true });
+    }
+  });
+
+  it('skips a PAX global header ("g", e.g. codeload\'s pax_global_header) without corrupting later entries', () => {
+    const tar = buildTar([
+      { name: 'pax_global_header', data: paxRecord('comment', 'abc123deadbeef'), typeFlag: 'g' },
+      { name: 'ok.txt', data: 'still fine', typeFlag: '0' },
+    ]);
+
+    const dest = fs.mkdtempSync(path.join(os.tmpdir(), 'archive-test-'));
+    try {
+      const count = extractTar(tar, dest);
+      expect(count).toBe(1);
+      expect(fs.readFileSync(path.join(dest, 'ok.txt'), 'utf8')).toBe('still fine');
+      expect(fs.existsSync(path.join(dest, 'pax_global_header'))).toBe(false);
+    } finally {
+      fs.rmSync(dest, { recursive: true, force: true });
+    }
+  });
 });
 
 interface TarEntry {
   name: string;
   data: string;
+  typeFlag?: string;
+}
+
+/** Builds a self-referential-length PAX record: "<len> <key>=<value>\n". */
+function paxRecord(key: string, value: string): string {
+  const suffix = ` ${key}=${value}\n`;
+  let len = suffix.length + 1;
+  for (;;) {
+    const candidate = `${len}${suffix}`;
+    if (candidate.length === len) {
+      return candidate;
+    }
+    len = candidate.length;
+  }
 }
 
 function buildTar(entries: TarEntry[]): Buffer {
@@ -68,7 +136,7 @@ function buildTar(entries: TarEntry[]): Buffer {
     size.copy(header, 124);
     header.write('00000000000\0', 136, 12, 'utf8');
     header.write('        ', 148, 8, 'utf8');
-    header[156] = '0'.charCodeAt(0);
+    header[156] = (entry.typeFlag ?? '0').charCodeAt(0);
     header.write('ustar\0', 257, 6, 'utf8');
     header.write('00', 263, 2, 'utf8');
     // checksum: sum of header bytes with chksum field as spaces
