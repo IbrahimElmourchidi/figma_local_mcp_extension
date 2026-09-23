@@ -1,9 +1,13 @@
 {
   "name": "figma-mcp-bridge",
   "displayName": "Figma Local MCP Bridge",
-  "description": "Manage the local Figma MCP bridge server, the Figma dev plugin, and opencode integration directly from VS Code.",
-  "version": "0.1.0",
-  "publisher": "ibrahimelmourchidi",
+  "description": "Manage the local Figma MCP bridge server, the Figma dev plugin, and connect Figma MCP to Copilot, Claude Code, Gemini CLI, Codex, opencode, Kilo Code, Cline and more.",
+  "version": "0.2.0",
+  "publisher": "UtaniumOrg",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/IbrahimElmourchidi/figma_local_mcp_extension"
+  },
   "license": "MIT",
   "icon": "images/utaIcon.png",
   "engines": {
@@ -16,7 +20,12 @@
     "figma",
     "mcp",
     "opencode",
-    "bridge"
+    "bridge",
+    "claude code",
+    "gemini",
+    "codex",
+    "kilo code",
+    "cline"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -123,6 +132,21 @@
         "title": "Figma MCP: Show Dashboard"
       },
       {
+        "command": "figmaMcpBridge.configureAgent",
+        "title": "Figma MCP: Connect AI Agent…",
+        "icon": "$(hubot)"
+      },
+      {
+        "command": "figmaMcpBridge.previewAgentConfig",
+        "title": "Figma MCP: Preview AI Agent Config…",
+        "icon": "$(preview)"
+      },
+      {
+        "command": "figmaMcpBridge.refreshAgentConfigs",
+        "title": "Figma MCP: Update Connected AI Agents",
+        "icon": "$(refresh)"
+      },
+      {
         "command": "figmaMcpBridge.configureOpencode",
         "title": "Configure opencode",
         "icon": "$(file-code)"
@@ -226,6 +250,15 @@
         },
         {
           "command": "figmaMcpBridge.saveSettings"
+        },
+        {
+          "command": "figmaMcpBridge.configureAgent"
+        },
+        {
+          "command": "figmaMcpBridge.previewAgentConfig"
+        },
+        {
+          "command": "figmaMcpBridge.refreshAgentConfigs"
         },
         {
           "command": "figmaMcpBridge.configureOpencode"
@@ -352,12 +385,12 @@
           "group": "1_runtime@3"
         },
         {
-          "command": "figmaMcpBridge.configureOpencode",
-          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.mcp.opencode",
-          "group": "2_mcp@1"
+          "command": "figmaMcpBridge.configureAgent",
+          "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.mcp.agent",
+          "group": "2_mcp@0"
         },
         {
-          "command": "figmaMcpBridge.previewOpencodeConfig",
+          "command": "figmaMcpBridge.previewAgentConfig",
           "when": "view == figmaMcpBridge.view && viewItem == figmaMcp.mcp.preview",
           "group": "2_mcp@2"
         },
@@ -417,7 +450,7 @@
           "type": "string",
           "default": "",
           "scope": "machine",
-          "description": "Path to the Node.js executable used in the exported opencode.json config (opencode spawns it outside VS Code, so this must be a real system Node install). Leave empty to auto-detect."
+          "description": "Node.js executable written into AI agent configs (Claude Code, Gemini CLI, Codex, opencode, Kilo, Cline, …). Leave empty to auto-detect: system Node if found, otherwise VS Code's own binary."
         },
         "figmaMcpBridge.figmaPluginId": {
           "type": "string",

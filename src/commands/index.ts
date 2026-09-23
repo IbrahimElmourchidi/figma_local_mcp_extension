@@ -9,15 +9,10 @@ import { OutputChannels } from '../ui/output';
 import { PluginManager, pluginBridgeUrl } from '../services/pluginManager';
 import { SystemChecker } from '../services/systemChecker';
 import { SourceBuilder } from '../services/sourceBuilder';
-import {
-  generateOpenCodeConfig,
-  openCodeConfigPath,
-  previewOpenCodeConfig,
-  saveOpenCodeConfig,
-} from '../services/opencodeConfig';
 import { probeHealth } from '../services/health';
 import { runCommand, BridgeError } from '../errors';
 import { registerSecretsCommands } from './secretsCommands';
+import { registerAgentCommands } from './agentCommands';
 
 export interface CommandDeps {
   readonly context: vscode.ExtensionContext;
@@ -38,9 +33,9 @@ export function registerAllCommands(deps: CommandDeps): void {
   const { context } = deps;
   registerSecretsCommands(context, deps.secrets);
 
-  const reg = (id: string, fn: () => unknown | Promise<unknown>, label = id) => {
+  const reg = (id: string, fn: (...args: unknown[]) => unknown, label = id) => {
     context.subscriptions.push(
-      vscode.commands.registerCommand(id, () => runCommand(label, async () => fn())),
+      vscode.commands.registerCommand(id, (...args: unknown[]) => runCommand(label, async () => fn(...args))),
     );
   };
 
@@ -109,65 +104,8 @@ export function registerAllCommands(deps: CommandDeps): void {
     void vscode.commands.executeCommand('figmaMcpBridge.view.focus');
   }, 'Show tree');
 
-  // --- MCP / opencode ---
-  reg('figmaMcpBridge.configureOpencode', async () => {
-    const cfg = deps.config();
-    const token = await deps.secrets.getOrCreateBridgePassword();
-    const figmaToken = await deps.secrets.getFigmaToken();
-    const mcpPath = deps.runtime.getMcpServerPath(cfg.mcpServerPath || undefined);
-
-    let nodePath = cfg.opencodeNodePath || cfg.nodePath || '';
-    if (!nodePath) {
-      try {
-        const real = await deps.nodes.resolveRealNode();
-        nodePath = real.command;
-      } catch {
-        nodePath = 'node';
-      }
-    }
-
-    const target = openCodeConfigPath();
-    const confirm = await vscode.window.showWarningMessage(
-      `Write Figma MCP entry to ${target}? It contains your bridge token in plaintext.`,
-      { modal: true },
-      'Write',
-    );
-    if (confirm !== 'Write') {
-      return;
-    }
-
-    const generated = generateOpenCodeConfig({
-      mcpServerPath: mcpPath,
-      bridgeToken: token,
-      host: cfg.host,
-      port: cfg.port,
-      figmaToken,
-      nodePath,
-    });
-    const written = saveOpenCodeConfig(generated);
-    void vscode.window.showInformationMessage(`opencode config updated: ${written}`);
-  }, 'Configure opencode');
-
-  reg('figmaMcpBridge.previewOpencodeConfig', async () => {
-    const cfg = deps.config();
-    const token = await deps.secrets.getOrCreateBridgePassword();
-    const figmaToken = await deps.secrets.getFigmaToken();
-    const mcpPath = deps.runtime.getMcpServerPath(cfg.mcpServerPath || undefined);
-    const nodePath = cfg.opencodeNodePath || cfg.nodePath || 'node';
-    const generated = generateOpenCodeConfig({
-      mcpServerPath: mcpPath,
-      bridgeToken: token,
-      host: cfg.host,
-      port: cfg.port,
-      figmaToken,
-      nodePath,
-    });
-    const doc = await vscode.workspace.openTextDocument({
-      content: previewOpenCodeConfig(generated),
-      language: 'json',
-    });
-    await vscode.window.showTextDocument(doc, { preview: true });
-  }, 'Preview opencode config');
+  // --- MCP / AI agents ---
+  registerAgentCommands(deps, reg);
 
   // --- Plugin ---
   reg('figmaMcpBridge.installPlugin', async () => {

@@ -3,7 +3,7 @@ import * as net from 'node:net';
 import { MIN_NODE_VERSION, RECOMMENDED_NODE_VERSION } from '../constants';
 import { probeHealth } from './health';
 import { StateStore, SystemRequirementSnapshot } from './state';
-import { NodeResolver } from './nodeResolver';
+import { NodeResolver, probeNode } from './nodeResolver';
 
 export interface CheckContext {
   readonly port: number;
@@ -43,26 +43,40 @@ export class SystemChecker {
     }
   }
 
+  /**
+   * Bridge/MCP run on VS Code's own binary (ELECTRON_RUN_AS_NODE), so a system
+   * Node.js is optional — only source builds need it, and those can download a
+   * managed copy. Fail only when neither runtime works.
+   */
   private async checkNode(context: CheckContext): Promise<SystemRequirementSnapshot> {
+    const title = 'Node runtime';
+    const electron = context.nodes.resolveElectronNode();
+    const electronVersion = await probeNode(electron.command, electron.env);
+    const realVersion = await this.probeRealNode(context);
+
+    if (electronVersion) {
+      const extra = realVersion
+        ? `system Node ${realVersion} available`
+        : 'system Node not needed (only for Build from source)';
+      return { id: 'node', title, met: true, detail: `${electronVersion} (VS Code built-in) · ${extra}` };
+    }
+    if (realVersion) {
+      return { id: 'node', title, met: true, detail: `${realVersion} (system)` };
+    }
+    return {
+      id: 'node',
+      title,
+      met: false,
+      detail: `Missing — VS Code's built-in runtime failed; install Node >= ${MIN_NODE_VERSION} (recommended ${RECOMMENDED_NODE_VERSION})`,
+    };
+  }
+
+  private async probeRealNode(context: CheckContext): Promise<string | null> {
     try {
       const node = await context.nodes.resolveRealNode();
-      return {
-        id: 'node',
-        title: 'Node.js',
-        met: true,
-        detail: `${node.version ?? 'ok'} (${node.via})`,
-      };
+      return `${node.version ?? 'ok'}${node.via === 'system' ? '' : ` (${node.via})`}`;
     } catch {
-      const probed = await probeNodeOnPath();
-      if (probed) {
-        return { id: 'node', title: 'Node.js', met: true, detail: `${probed} (system)` };
-      }
-      return {
-        id: 'node',
-        title: 'Node.js',
-        met: false,
-        detail: `Missing — need >= ${MIN_NODE_VERSION} (recommended ${RECOMMENDED_NODE_VERSION})`,
-      };
+      return probeNodeOnPath();
     }
   }
 

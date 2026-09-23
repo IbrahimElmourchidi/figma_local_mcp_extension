@@ -4,10 +4,11 @@ All notable changes to the "Figma MCP Bridge" extension are documented in this f
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
-## [Unreleased]
+## [0.2.0] - 2026-09-23
 
 ### Added
 
+- Multi-agent MCP config support: Connect AI Agent / Preview Config / Update Connected Agents commands covering Copilot, Claude Code, Gemini CLI, Codex, opencode, Kilo Code, Cline, and more.
 - Project scaffolding: esbuild bundling, ESLint, TypeScript, unit (vitest) and integration (`@vscode/test-cli`) test harnesses, F5 debug launch.
 - Configuration schema for port, host, autoStart, mcpServerPath, nodePath, opencodeNodePath, figmaPluginId, autoCheckUpdates.
 - Secret storage for the bridge pairing password and Figma token, with commands to set/regenerate/clear them.

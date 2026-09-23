@@ -1,6 +1,6 @@
 # Figma Local MCP Bridge
 
-A VS Code extension for managing the local Figma MCP bridge server: server lifecycle, the Figma dev plugin, MCP tool integration for Copilot, and opencode export — all without leaving the editor.
+A VS Code extension for managing the local Figma MCP bridge server: server lifecycle, the Figma dev plugin, MCP tool integration for Copilot, and one-click setup for other AI agents — all without leaving the editor.
 
 This is a from-scratch port of the Figma Local MCP GUI Flutter desktop app, rebuilt around native VS Code UI (activity-bar tree view, status bar, output channels, commands) instead of a standalone window.
 
@@ -9,15 +9,29 @@ This is a from-scratch port of the Figma Local MCP GUI Flutter desktop app, rebu
 - **Bridge lifecycle** — start/stop/restart the local bridge with a health gate (status flips to Running only after `/health` returns 200), orphan-kill, multi-window adopt-external, session/uptime in the status bar.
 - **MCP for Copilot** — registers an `McpServerDefinitionProvider` so agent mode gets the Figma MCP tools natively (VS Code ≥ 1.101).
 - **Plugin build** — builds the Figma development plugin (`manifest.json`, `code.js`, `ui.html`, with the bridge port injected) into an extension-owned folder, ready to import into Figma; rebuilds update it in place and a sidecar `.installed.json` tracks staleness.
-- **opencode export** — generate and atomically merge a `mcp["figma-mcp-free"]` entry into `opencode.json` (chmod 600; contains a plaintext bridge token — you are warned before the first write).
+- **Connect AI agent…** — one command adds the Figma MCP server to other agents. Pick any of them (installed ones are detected and preselected):
+
+  | Agent | Config written |
+  |---|---|
+  | Claude Code | `claude mcp add-json --scope user` if the CLI is on PATH, else `~/.claude.json` |
+  | Gemini CLI | `~/.gemini/settings.json` |
+  | OpenAI Codex CLI | `~/.codex/config.toml` (or `$CODEX_HOME`) |
+  | opencode | `~/.config/opencode/opencode.json` (`%APPDATA%\opencode` on Windows) |
+  | Kilo Code / Cline / Roo Code | the extension's `settings/*mcp_settings.json` in VS Code global storage |
+  | Cursor | `~/.cursor/mcp.json` |
+  | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+  | Claude Desktop | `claude_desktop_config.json` |
+  | Anything else | "Other agent…" copies a generic `mcpServers` JSON snippet |
+
+  Existing entries and settings are preserved (atomic merge, one-time `.bak`, chmod 600). **Preview AI Agent Config…** shows the entry without writing it. When the bridge token is changed or regenerated, connected agents are rewritten automatically (or run **Update Connected AI Agents**). Agents talk to the bridge that this extension runs, so keep VS Code open while you use them.
 - **Runtime** — seeds from a VSIX-bundled `runtime-seed/` built from `superdoccimo/figma-mcp-free`; stage-and-swap, rollback, force-reinstall; optional on-device **Build from source** with verification (MCP `initialize` + `/health` 401/200) before swap.
-- **System check** — Node ≥ 18, port availability/health, Figma desktop process, plugin installed.
+- **System check** — Node runtime (VS Code's built-in one counts), port availability/health, Figma desktop process, plugin installed.
 
 ## Requirements
 
 - VS Code **1.101+** (native MCP support)
 - Figma desktop (to import and run the development plugin)
-- Node.js ≥ 18 for source builds and opencode export (bridge/MCP child processes reuse VS Code's own Node via `ELECTRON_RUN_AS_NODE`)
+- **No Node.js install needed.** The bridge, the Copilot MCP server and the AI agent configs all run on VS Code's own binary via `ELECTRON_RUN_AS_NODE`. Only **Build from source** needs a real Node.js ≥ 18, and it offers to download a managed copy if none is found.
 
 ## Extension Settings
 
@@ -28,7 +42,7 @@ This is a from-scratch port of the Figma Local MCP GUI Flutter desktop app, rebu
 | `figmaMcpBridge.autoStart` | `false` | Start the bridge on activation |
 | `figmaMcpBridge.mcpServerPath` | `""` | Custom `mcp-server.cjs` path |
 | `figmaMcpBridge.nodePath` | `""` | Real Node.js for source builds / server fallback |
-| `figmaMcpBridge.opencodeNodePath` | `""` | Node written into exported `opencode.json` |
+| `figmaMcpBridge.opencodeNodePath` | `""` | Node written into AI agent configs (optional; defaults to system Node, else VS Code's binary) |
 | `figmaMcpBridge.figmaPluginId` | `""` | Override plugin manifest `id` |
 | `figmaMcpBridge.autoCheckUpdates` | `true` | Check upstream SHA on activation |
 
@@ -52,7 +66,7 @@ The manifest lists only `http://localhost:<port>` in `devAllowedDomains`: Figma 
 ## Security notes
 
 - The bridge token is passed only via `FIGMA_PLUGIN_BRIDGE_TOKEN` (never argv).
-- `opencode.json` is written with mode `600` on POSIX and contains the bridge token in plaintext by design.
+- AI agent config files are written with mode `600` on POSIX and contain the bridge token in plaintext by design — don't commit or share them.
 - Runtime `runtime.json` files are SHA-256 verified hard-fail before stage-and-swap.
 
 ## Development

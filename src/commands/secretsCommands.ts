@@ -20,11 +20,14 @@ export function registerSecretsCommands(context: vscode.ExtensionContext, secret
       }
       await secrets.setBridgePassword(value);
       vscode.window.showInformationMessage('Bridge pairing password updated.');
+      void vscode.commands.executeCommand('figmaMcpBridge.refreshAgentConfigs', { quiet: true });
     }),
 
     vscode.commands.registerCommand('figmaMcpBridge.regenerateBridgePassword', async () => {
       await secrets.regenerateBridgePassword();
       vscode.window.showInformationMessage('Bridge pairing password regenerated.');
+      // Agent configs embed the token; rewrite the ones we manage.
+      void vscode.commands.executeCommand('figmaMcpBridge.refreshAgentConfigs', { quiet: true });
     }),
 
     vscode.commands.registerCommand('figmaMcpBridge.setFigmaToken', async () => {

@@ -170,8 +170,8 @@ function sectionChildren(section: SectionId, snapshot: AppSnapshot): TreeNode[] 
       return [
         item('mcp.status', 'Status', statusText(m.status)),
         item('mcp.error', 'Error', m.errorMessage),
-        cmd('mcp.configureOpencode', 'Configure opencode', 'figmaMcpBridge.configureOpencode', 'file-code', 'figmaMcp.mcp.opencode'),
-        cmd('mcp.preview', 'Preview opencode config', 'figmaMcpBridge.previewOpencodeConfig', 'preview', 'figmaMcp.mcp.preview'),
+        cmd('mcp.configureAgent', 'Connect AI agent… (Claude Code, Gemini, Codex, Kilo…)', 'figmaMcpBridge.configureAgent', 'hubot', 'figmaMcp.mcp.agent'),
+        cmd('mcp.preview', 'Preview agent config', 'figmaMcpBridge.previewAgentConfig', 'preview', 'figmaMcp.mcp.preview'),
         cmd('mcp.clearFigmaToken', 'Clear Figma token', 'figmaMcpBridge.clearFigmaToken', 'key', 'figmaMcp.mcp.clearToken'),
         cmd('mcp.setFigmaToken', 'Set Figma token', 'figmaMcpBridge.setFigmaToken', 'key', 'figmaMcp.mcp.setToken'),
       ];
