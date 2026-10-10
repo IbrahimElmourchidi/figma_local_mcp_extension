@@ -508,7 +508,7 @@
     "verify-seed": "node tool/verify-seed.mjs",
     "prepublish:only": "npm run package",
     "vsce:package": "vsce package --out figma-mcp-bridge-$(node -p \"require('./package.json').version\").vsix",
-    "vsce:publish": "npm run vsce:package && vsce publish --pat $VSCE_PAT"
+    "vsce:publish": "vsce publish --packagePath figma-mcp-bridge-$(node -p \"require('./package.json').version\").vsix --pat $VSCE_PAT"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",
