@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { validateBridgeConfig, BridgeConfig } from '../../src/config/bridgeConfig';
 import { BridgeError } from '../../src/errors';
+import { DEFAULT_MAX_DEPTH, MAX_MAX_DEPTH } from '../../src/constants';
 
 function cfg(overrides: Partial<BridgeConfig> = {}): BridgeConfig {
   return {
@@ -12,6 +13,7 @@ function cfg(overrides: Partial<BridgeConfig> = {}): BridgeConfig {
     nodePath: '',
     figmaPluginId: '',
     autoCheckUpdates: true,
+    maxDepth: 5,
     ...overrides,
   };
 }
@@ -50,5 +52,30 @@ describe('validateBridgeConfig', () => {
 
   it('accepts optional paths that exist', () => {
     expect(() => validateBridgeConfig(cfg({ nodePath: process.execPath }))).not.toThrow();
+  });
+
+  describe('maxDepth', () => {
+    it('accepts the default and the full valid range', () => {
+      expect(() => validateBridgeConfig(cfg({ maxDepth: DEFAULT_MAX_DEPTH }))).not.toThrow();
+      for (const depth of [1, DEFAULT_MAX_DEPTH, 12, MAX_MAX_DEPTH]) {
+        expect(() => validateBridgeConfig(cfg({ maxDepth: depth }))).not.toThrow();
+      }
+    });
+
+    it('rejects out-of-range and non-integer depths', () => {
+      // 0 is a legal request to the patched bundle, but not a sensible user
+      // setting (it returns no children at all), hence minimum: 1 in package.json.
+      expect(() => validateBridgeConfig(cfg({ maxDepth: 0 }))).toThrow(BridgeError);
+      expect(() => validateBridgeConfig(cfg({ maxDepth: -1 }))).toThrow(BridgeError);
+      expect(() => validateBridgeConfig(cfg({ maxDepth: MAX_MAX_DEPTH + 1 }))).toThrow(BridgeError);
+      expect(() => validateBridgeConfig(cfg({ maxDepth: 7.5 }))).toThrow(BridgeError);
+      expect(() => validateBridgeConfig(cfg({ maxDepth: Number.NaN }))).toThrow(BridgeError);
+    });
+
+    it('reports the valid range in the error message', () => {
+      expect(() => validateBridgeConfig(cfg({ maxDepth: 999 }))).toThrow(
+        new RegExp(`must be an integer 1-${MAX_MAX_DEPTH}`),
+      );
+    });
   });
 });

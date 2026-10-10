@@ -19,6 +19,8 @@ import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { gunzipSync } from 'node:zlib';
 
+import { patchBridgeCli, patchMcpServer, PATCH_LEVEL } from './runtimePatches.mjs';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '..');
 
@@ -251,6 +253,41 @@ function sha256File(filePath) {
   return createHash('sha256').update(fs.readFileSync(filePath)).digest('hex');
 }
 
+/**
+ * Apply the user-configurable-inspect-depth patches to the freshly bundled
+ * runtime. Must run before the SHA-256 map is computed.
+ *
+ * A skipped anchor is a warning, not a failure: upstream may legitimately have
+ * renamed the constant or lifted the cap itself, and refusing to build would
+ * block an unrelated runtime update. The build log states exactly which patches
+ * landed so a silent regression is still visible.
+ */
+function applyRuntimePatches(outDir) {
+  const summary = {};
+  for (const [file, patch] of [
+    ['mcp-server.cjs', patchMcpServer],
+    ['bridge-cli.cjs', patchBridgeCli],
+  ]) {
+    const full = path.join(outDir, file);
+    const src = fs.readFileSync(full, 'utf8');
+    const result = patch(src);
+    if (result.text !== src) {
+      fs.writeFileSync(full, result.text, 'utf8');
+    }
+    for (const outcome of result.applied) {
+      log(`  patched ${file}: ${outcome.name}`);
+    }
+    for (const outcome of result.skipped) {
+      log(`  SKIPPED ${file}: ${outcome.name} (${outcome.detail}) — ${outcome.anchor}`);
+    }
+    summary[file] = {
+      applied: result.applied.map((p) => p.name),
+      skipped: result.skipped.map((p) => p.name),
+    };
+  }
+  return summary;
+}
+
 function esbuildOs() {
   if (process.platform === 'linux') return 'linux';
   if (process.platform === 'darwin') return 'darwin';
@@ -466,6 +503,11 @@ async function main() {
       await fsp.copyFile(from, path.join(pluginOut, name));
     }
 
+    // Patch BEFORE hashing, so runtime.json's SHA-256 map covers the patched
+    // bytes and `verify-seed.mjs` / activation both agree on what shipped.
+    // Output depends only on upstream bytes, so the build stays reproducible.
+    const patches = applyRuntimePatches(outDir);
+
     const builtAt = new Date().toISOString();
     await fsp.writeFile(path.join(outDir, 'VERSION'), `${sha}\n`, 'utf8');
 
@@ -489,6 +531,12 @@ async function main() {
       builtBy: process.env.GITHUB_ACTIONS ? 'ci' : 'local',
       esbuildVersion: ESBUILD_VERSION,
       nodeTarget: NODE_TARGET,
+      // Lets already-installed extensions re-copy the seed when a patch changes
+      // without upstream moving. `manifestNeedsUpgrade` compares this alongside
+      // upstreamSha — otherwise a patched bundle under an unchanged SHA would
+      // never reach an existing install.
+      patchLevel: PATCH_LEVEL,
+      patches,
       files,
     };
     await fsp.writeFile(path.join(outDir, 'runtime.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');

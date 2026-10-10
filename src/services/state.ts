@@ -31,6 +31,12 @@ export interface RuntimeSnapshot {
   readonly updateAvailable: boolean;
   readonly building: boolean;
   readonly buildStatus?: string;
+  /** Build-patch generation of the installed runtime. */
+  readonly patchLevel?: number;
+  /** Patches whose anchor was not found when the seed was built. */
+  readonly skippedPatches?: readonly string[];
+  /** Effective `figmaMcpBridge.maxDepth` handed to the MCP server as env. */
+  readonly maxDepth?: number;
 }
 
 export interface PluginSnapshot {

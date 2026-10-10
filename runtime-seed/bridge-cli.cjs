@@ -3046,7 +3046,7 @@ var import_node_path = require("node:path");
 
 // ../../../../../../../tmp/figma-mcp-runtime-Oe0RMp/source/figma-mcp-free-0b1d19779ffbbe3c52bc85410ddd1f55724766aa/packages/figma-client/dist/selection.js
 var DEFAULT_DEPTH = 2;
-var MAX_DEPTH = 5;
+var MAX_DEPTH = /* figma-mcp-bridge: user-configurable inspect depth */ (function () {  var raw = String(process.env.FIGMA_MCP_MAX_DEPTH == null ? "" : process.env.FIGMA_MCP_MAX_DEPTH).trim();  var v = raw === "" ? NaN : Number(raw);  return Math.min(64, Math.max(0, Number.isFinite(v) ? Math.trunc(v) : 5));})();
 var DEFAULT_MAX_CHILDREN = 20;
 var MAX_CHILDREN = 100;
 var MAX_TEXT_LENGTH = 2e3;
@@ -4207,9 +4207,9 @@ program2.command("serve").description("Start the local in-memory bridge server")
 addConnectionOptions(program2.command("status").description("Check bridge health")).action(async (options) => console.log(JSON.stringify(await bridgeClient(options).health(), null, 2)));
 addConnectionOptions(program2.command("current").description("Print the current captured selection snapshot")).action(async (options) => console.log(JSON.stringify(await bridgeClient(options).getSnapshot(), null, 2)));
 addConnectionOptions(program2.command("clear").description("Clear the in-memory snapshot")).action(async (options) => console.log(JSON.stringify(await bridgeClient(options).clearSnapshot(), null, 2)));
-addConnectionOptions(program2.command("inspect").description("Transform one captured selection into compact implementation context")).option("--index <n>", "captured selection index", parseInteger, 0).option("--depth <n>", "child depth to include (0-5)", parseInteger).option("--max-children <n>", "maximum children per node (0-100)", parseInteger).action(async (options) => {
-  if (options.depth !== void 0 && options.depth > 5)
-    throw new InvalidArgumentError("depth must be between 0 and 5.");
+addConnectionOptions(program2.command("inspect").description("Transform one captured selection into compact implementation context")).option("--index <n>", "captured selection index", parseInteger, 0).option("--depth <n>", "child depth to include (0-64)", parseInteger).option("--max-children <n>", "maximum children per node (0-100)", parseInteger).action(async (options) => {
+  if (options.depth !== void 0 && options.depth > 64)
+    throw new InvalidArgumentError("depth must be between 0 and 64.");
   if (options.maxChildren !== void 0 && options.maxChildren > 100)
     throw new InvalidArgumentError("max-children must be between 0 and 100.");
   const snapshot = await bridgeClient(options).getSnapshot();

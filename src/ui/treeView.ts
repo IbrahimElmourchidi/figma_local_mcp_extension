@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
 import { AppSnapshot, StateStore } from '../services/state';
+import { DEFAULT_MAX_DEPTH } from '../constants';
 import { formatDuration } from './statusBar';
 
 type SectionId = 'bridge' | 'mcp' | 'plugin' | 'runtime' | 'system';
@@ -204,6 +205,34 @@ function sectionChildren(section: SectionId, snapshot: AppSnapshot): TreeNode[] 
         ),
         item('runtime.rollback', 'Rollback', r.hasRollback ? 'Available' : 'None'),
       ];
+      // Only surface build-patch details once a patched seed is installed —
+      // pre-patch runtimes report no patchLevel and these rows would be noise.
+      if (typeof r.patchLevel === 'number' && r.patchLevel > 0) {
+        const depth = r.maxDepth ?? DEFAULT_MAX_DEPTH;
+        items.push(
+          item(
+            'runtime.maxDepth',
+            'Max inspect depth',
+            depth > DEFAULT_MAX_DEPTH ? `${depth} (raised from ${DEFAULT_MAX_DEPTH})` : String(depth),
+            `Maximum node-tree depth the Figma inspect tools may return.\n` +
+              `figmaMcpBridge.maxDepth = ${depth} (upstream default: ${DEFAULT_MAX_DEPTH})\n\n` +
+              `This only raises the ceiling — your agent still picks a depth per call. ` +
+              `Deeper responses mean more tokens, more cost, and larger Figma REST calls.\n` +
+              `Applies on the next MCP server start.`,
+          ),
+        );
+        if (r.skippedPatches && r.skippedPatches.length > 0) {
+          items.push(
+            item(
+              'runtime.skippedPatches',
+              'Skipped patches',
+              String(r.skippedPatches.length),
+              `Build patches that found no anchor in the upstream bundle — ` +
+                `maxDepth may not take effect.\n${r.skippedPatches.join('\n')}`,
+            ),
+          );
+        }
+      }
       if (r.buildStatus) {
         items.push(item('runtime.buildStatus', 'Build', r.buildStatus));
       }

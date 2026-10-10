@@ -45,8 +45,19 @@ This is a from-scratch port of the Figma Local MCP GUI Flutter desktop app, rebu
 | `figmaMcpBridge.opencodeNodePath` | `""` | Node written into AI agent configs (optional; defaults to system Node, else VS Code's binary) |
 | `figmaMcpBridge.figmaPluginId` | `""` | Override plugin manifest `id` |
 | `figmaMcpBridge.autoCheckUpdates` | `true` | Check upstream SHA on activation |
+| `figmaMcpBridge.maxDepth` | `5` | Max node-tree depth the Figma inspect tools may return (1–64; upstream caps at 5) |
 
 Secrets (pairing password, Figma token) live in VS Code Secret Storage — never in settings or argv.
+
+### Max inspect depth
+
+Upstream hard-codes a ceiling of 5 for `inspect_selection` / `inspect_current_selection`, and publishes it to MCP clients as a JSON-Schema `maximum`, so clients reject anything deeper before the server is even asked. `figmaMcpBridge.maxDepth` lifts that ceiling by rebuilding the bundled runtime with a small, anchored patch that makes the limit read `FIGMA_MCP_MAX_DEPTH` (`tool/runtimePatches.mjs`). The value is then passed to the MCP server through the environment — no rebuild happens when you change the setting, and the change applies on the next MCP server start.
+
+It only raises the **ceiling**: your agent still picks a depth per call. Raising it does not make every call more expensive, but it makes expensive responses possible. Response size grows roughly as `maxChildren × depth`, `maxChildren` is independently capped at 100, `inspect_selection` sends the depth to the Figma REST API too (so deeper means slower and larger network responses), and oversized responses can be truncated or rejected outright. The settings UI asks for confirmation above the default, and the Runtime section of the dashboard tree shows the effective value.
+
+The ceiling is 64 because that is how deeply the bridge already captures a selection (`bridge-cli serve --max-depth`, default 64). Raising `maxDepth` past it could not reveal anything more, so the two are deliberately kept aligned.
+
+If an upstream update changes the code these patches anchor on, the patch is **skipped** rather than half-applied and the build still succeeds — the dashboard surfaces skipped patches so the setting silently doing nothing is visible.
 
 ## Commands
 

@@ -6,3 +6,4 @@ out/
 coverage/
 *.log
 .DS_Store
+PUBLISH.md

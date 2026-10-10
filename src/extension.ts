@@ -15,8 +15,47 @@ import { StatusBar } from './ui/statusBar';
 import { TreeProvider } from './ui/treeView';
 import { registerAllCommands } from './commands/index';
 import { toBridgeError } from './errors';
+import {
+  CONFIG_SECTION,
+  DEFAULT_MAX_DEPTH,
+  MAX_DEPTH_WARN_THRESHOLD,
+} from './constants';
 
 let deactivateHooks: Array<() => void> = [];
+
+/**
+ * Ask before accepting a maxDepth above upstream's default.
+ *
+ * The value is already written by the time this fires (VS Code persists settings
+ * before notifying), so the confirm offers an explicit revert rather than a
+ * plain "yes/no" — cancelling alone would leave the expensive value in place.
+ */
+async function warnOnRaisedMaxDepth(maxDepth: number): Promise<void> {
+  if (maxDepth <= MAX_DEPTH_WARN_THRESHOLD) {
+    return;
+  }
+  const choice = await vscode.window.showWarningMessage(
+    `Raise the Figma inspect depth limit to ${maxDepth}?`,
+    {
+      modal: true,
+      detail:
+        `This only raises the ceiling — your AI agent still chooses a depth per call, ` +
+        `so calls do not get more expensive on their own. But when it does request more, ` +
+        `the response can be far larger, which means:\n\n` +
+        `• More tokens, and therefore more cost, for those calls.\n` +
+        `• Slower results, because a deeper inspect also sends a deeper request to the Figma REST API.\n` +
+        `• A risk of oversized responses being truncated or rejected, wasting the call.\n\n` +
+        `Most designs nest under 12 levels. Leave it at ${DEFAULT_MAX_DEPTH} unless a real selection is being cut off.`,
+    },
+    'Keep',
+    `Revert to ${DEFAULT_MAX_DEPTH}`,
+  );
+  if (choice === `Revert to ${DEFAULT_MAX_DEPTH}`) {
+    await vscode.workspace
+      .getConfiguration(CONFIG_SECTION)
+      .update('maxDepth', DEFAULT_MAX_DEPTH, vscode.ConfigurationTarget.Global);
+  }
+}
 
 export function activate(context: vscode.ExtensionContext): void {
   const output = new OutputChannels();
@@ -45,6 +84,8 @@ export function activate(context: vscode.ExtensionContext): void {
       builtBy: manifest?.builtBy,
       healthy: runtime.isHealthy(),
       hasRollback: runtime.hasRollbackAvailable(),
+      patchLevel: manifest?.patchLevel,
+      maxDepth: config().maxDepth,
     });
   } catch (error) {
     const e = toBridgeError(error);
@@ -100,6 +141,10 @@ export function activate(context: vscode.ExtensionContext): void {
         const cfg = readBridgeConfig();
         if (bridge.isRunning() && e.affectsConfiguration('figmaMcpBridge.autoCheckUpdates')) {
           // no-op; other live fields require restart which the user triggers
+        }
+        if (e.affectsConfiguration('figmaMcpBridge.maxDepth')) {
+          state.updateRuntime({ ...state.get().runtime, maxDepth: cfg.maxDepth });
+          await warnOnRaisedMaxDepth(cfg.maxDepth);
         }
         void cfg;
       } catch (error) {

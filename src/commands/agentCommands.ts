@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFile } from 'node:child_process';
 import * as vscode from 'vscode';
-import { ENV_BRIDGE_TOKEN, ENV_BRIDGE_URL, ENV_FIGMA_TOKEN } from '../constants';
+import { ENV_BRIDGE_TOKEN, ENV_BRIDGE_URL, ENV_FIGMA_TOKEN, ENV_MAX_DEPTH } from '../constants';
 import { bridgeUrl } from '../util/bridgeUrl';
 import {
   AGENT_TARGETS,
@@ -241,6 +241,7 @@ async function buildSpec(
     ...runner.extraEnv,
     [ENV_BRIDGE_TOKEN]: token,
     [ENV_BRIDGE_URL]: bridgeUrl({ host: cfg.host, port: cfg.port }),
+    [ENV_MAX_DEPTH]: String(cfg.maxDepth),
   };
   if (figmaToken) {
     env[ENV_FIGMA_TOKEN] = figmaToken;

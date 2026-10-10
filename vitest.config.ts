@@ -11,6 +11,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['test/unit/**/*.test.ts'],
+    // `.mts` covers the tests that import the ESM build scripts under tool/.
+    include: ['test/unit/**/*.test.ts', 'test/unit/**/*.test.mts'],
   },
 });

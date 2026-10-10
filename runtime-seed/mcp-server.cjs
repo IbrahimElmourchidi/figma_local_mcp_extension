@@ -21423,7 +21423,7 @@ var StdioServerTransport = class {
 
 // ../../../../../../../tmp/figma-mcp-runtime-Oe0RMp/source/figma-mcp-free-0b1d19779ffbbe3c52bc85410ddd1f55724766aa/packages/figma-client/dist/selection.js
 var DEFAULT_DEPTH = 2;
-var MAX_DEPTH = 5;
+var MAX_DEPTH = /* figma-mcp-bridge: user-configurable inspect depth */ (function () {  var raw = String(process.env.FIGMA_MCP_MAX_DEPTH == null ? "" : process.env.FIGMA_MCP_MAX_DEPTH).trim();  var v = raw === "" ? NaN : Number(raw);  return Math.min(64, Math.max(0, Number.isFinite(v) ? Math.trunc(v) : 5));})();
 var DEFAULT_MAX_CHILDREN = 20;
 var MAX_CHILDREN = 100;
 var MAX_TEXT_LENGTH = 2e3;
@@ -22871,7 +22871,7 @@ var inspectSelectionInputSchema = {
   fileId: external_exports.string().optional(),
   figmaUrl: external_exports.string().optional(),
   nodeId: external_exports.string().optional(),
-  depth: external_exports.number().int().min(0).max(5).optional(),
+  depth: external_exports.number().int().min(0).max(64).optional(),
   maxChildren: external_exports.number().int().min(0).max(100).optional(),
   refresh
 };
@@ -22882,7 +22882,7 @@ var currentSelectionInputSchema = {
 };
 var inspectCurrentSelectionInputSchema = {
   index: selectionIndex,
-  depth: external_exports.number().int().min(0).max(5).optional(),
+  depth: external_exports.number().int().min(0).max(64).optional(),
   maxChildren: external_exports.number().int().min(0).max(100).optional()
 };
 var generateCurrentSelectionInputSchema = {

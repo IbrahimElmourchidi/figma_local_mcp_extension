@@ -4,6 +4,23 @@ All notable changes to the "Figma MCP Bridge" extension are documented in this f
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.0] - 2026-10-10
+
+### Added
+
+- `figmaMcpBridge.maxDepth` (1–64, default 5) to raise the Figma inspect tools' node-tree depth ceiling. Upstream hard-codes this at 5 in three places and publishes it to MCP clients as a JSON-Schema `maximum`, so clients reject a deeper `inspect_selection` before the server is even asked — the setting could not be worked around from the client side. The ceiling matches upstream's REST capture depth (64) so it can never exceed how deeply the bridge captured the selection. Implemented as anchored build-time patches in `tool/runtimePatches.mjs` that make the limit read `FIGMA_MCP_MAX_DEPTH`, so changing the setting only updates the spawned server's environment — no rebuild, and the change applies on the next MCP server start.
+- Cost warnings for the setting: an inline Settings description, a modal confirmation above the default (with an explicit revert, since the value is already persisted when the prompt appears), and a Runtime tree row showing the effective value. Warnings cover the `maxChildren × depth` blowup, that `inspect_selection` sends the depth to the Figma REST API too, and that oversized responses can be truncated or rejected.
+- The Runtime tree surfaces skipped build patches, so an upstream refactor that silently disables `maxDepth` is visible instead of looking like a no-op setting.
+
+### Changed
+
+- `runtime.json` now records `patchLevel` and a per-file patch summary. `manifestNeedsUpgrade` treats a newer `patchLevel` as an upgrade even at an identical `upstreamSha`; without this the matching-sha short-circuit meant patched bundles never reached already-installed extensions.
+- The MCP server definition's version now folds in `patchLevel` and `maxDepth` alongside the upstream SHA, so changing the depth actually restarts the server instead of leaving a live one that never receives the new value.
+
+### Fixed
+
+- Build-patch idempotency sentinels are derived from the configured ceiling rather than hardcoded, so raising the ceiling no longer made every patch misreport `anchor not found` against an already-patched bundle — which would have looked like upstream drift and prompted a rebuild that could not have fixed it.
+
 ## [0.2.0] - 2026-09-23
 
 ### Added

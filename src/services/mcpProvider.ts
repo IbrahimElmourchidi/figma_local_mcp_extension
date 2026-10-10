@@ -1,5 +1,10 @@
 import * as vscode from 'vscode';
-import { ENV_BRIDGE_TOKEN, ENV_BRIDGE_URL, ENV_FIGMA_TOKEN } from '../constants';
+import {
+  ENV_BRIDGE_TOKEN,
+  ENV_BRIDGE_URL,
+  ENV_FIGMA_TOKEN,
+  ENV_MAX_DEPTH,
+} from '../constants';
 import { BridgeConfig } from '../config/bridgeConfig';
 import { SecretsStore } from '../config/secretsStore';
 import { RuntimeStore } from './runtimeStore';
@@ -43,6 +48,11 @@ export function registerMcpProvider(context: vscode.ExtensionContext, deps: {
         const env: Record<string, string | number | null> = {
           ...flattenEnv(node.env),
           ELECTRON_RUN_AS_NODE: '1',
+          // Read by the patched bundles' MAX_DEPTH. Set here (not in
+          // resolveMcpServerDefinition) so a settings change alters the
+          // definition VS Code already handed out, rather than only the
+          // secret-injected copy.
+          [ENV_MAX_DEPTH]: cfg.maxDepth,
         };
         const manifest = deps.runtime.getInstalledManifest();
         const definition = new vscode.McpStdioServerDefinition(
@@ -50,7 +60,15 @@ export function registerMcpProvider(context: vscode.ExtensionContext, deps: {
           node.command,
           scriptArgs(node, mcpPath),
           env,
-          manifest?.upstreamSha,
+          // The version is what VS Code diffs to decide whether a running
+          // server can be reused. The upstream SHA alone would be unchanged when
+          // maxDepth changes, so the server could be kept alive and never pick
+          // up the new FIGMA_MCP_MAX_DEPTH — the setting would look applied and
+          // do nothing. Fold the depth (and the patch level that gates whether
+          // the bundle reads it at all) into the identity.
+          manifest
+            ? `${manifest.upstreamSha}+p${manifest.patchLevel ?? 0}+d${cfg.maxDepth}`
+            : undefined,
         );
         lastProvideError = null;
         return [definition];
@@ -86,6 +104,9 @@ export function registerMcpProvider(context: vscode.ExtensionContext, deps: {
         ...(server.env as Record<string, string | number | null> | undefined),
         [ENV_BRIDGE_TOKEN]: token,
         [ENV_BRIDGE_URL]: bridgeUrl({ host: cfg.host, port: cfg.port }),
+        // Re-asserted rather than only inherited: the definition may have been
+        // published before the user changed the setting.
+        [ENV_MAX_DEPTH]: cfg.maxDepth,
       };
       const figmaToken = await deps.secrets.getFigmaToken();
       if (figmaToken) {

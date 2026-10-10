@@ -1,6 +1,13 @@
 import * as fs from 'node:fs';
 import * as vscode from 'vscode';
-import { CONFIG_SECTION, DEFAULT_HOST, DEFAULT_PORT, VALID_HOSTS } from '../constants';
+import {
+  CONFIG_SECTION,
+  DEFAULT_HOST,
+  DEFAULT_MAX_DEPTH,
+  DEFAULT_PORT,
+  MAX_MAX_DEPTH,
+  VALID_HOSTS,
+} from '../constants';
 import { BridgeError } from '../errors';
 
 export interface BridgeConfig {
@@ -12,6 +19,7 @@ export interface BridgeConfig {
   readonly nodePath: string;
   readonly figmaPluginId: string;
   readonly autoCheckUpdates: boolean;
+  readonly maxDepth: number;
 }
 
 export function readBridgeConfig(): BridgeConfig {
@@ -25,6 +33,7 @@ export function readBridgeConfig(): BridgeConfig {
     nodePath: cfg.get<string>('nodePath', ''),
     figmaPluginId: cfg.get<string>('figmaPluginId', ''),
     autoCheckUpdates: cfg.get<boolean>('autoCheckUpdates', true),
+    maxDepth: cfg.get<number>('maxDepth', DEFAULT_MAX_DEPTH),
   };
   validateBridgeConfig(config);
   return config;
@@ -38,6 +47,16 @@ export function validateBridgeConfig(config: BridgeConfig): void {
     throw new BridgeError(
       'config_invalid',
       `Invalid host "${config.host}": must be one of ${VALID_HOSTS.join(', ')}`,
+    );
+  }
+  if (
+    !Number.isInteger(config.maxDepth) ||
+    config.maxDepth < 1 ||
+    config.maxDepth > MAX_MAX_DEPTH
+  ) {
+    throw new BridgeError(
+      'config_invalid',
+      `Invalid maxDepth ${config.maxDepth}: must be an integer 1-${MAX_MAX_DEPTH}`,
     );
   }
   validateOptionalPath('mcpServerPath', config.mcpServerPath);

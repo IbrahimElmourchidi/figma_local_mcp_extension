@@ -2,7 +2,7 @@
   "name": "figma-mcp-bridge",
   "displayName": "Figma Local MCP Bridge",
   "description": "Manage the local Figma MCP bridge server, the Figma dev plugin, and connect Figma MCP to Copilot, Claude Code, Gemini CLI, Codex, opencode, Kilo Code, Cline and more.",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "publisher": "UtaniumOrg",
   "repository": {
     "type": "git",
@@ -462,6 +462,14 @@
           "type": "boolean",
           "default": true,
           "description": "Automatically check for bridge/MCP runtime bundle updates on activation."
+        },
+        "figmaMcpBridge.maxDepth": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "maximum": 64,
+          "scope": "machine",
+          "markdownDescription": "Maximum node-tree depth the Figma `inspect_selection` / `inspect_current_selection` tools may return. Upstream caps this at `5`.\n\nThis only raises the **ceiling** — your AI agent still chooses a depth per call, so a high value does not make every call expensive. It makes expensive calls *possible*.\n\n**Deeper is costlier:**\n\n- The number of returned nodes grows roughly as `maxChildren × depth`, so raising this can sharply increase **token usage and cost** per call.\n- The cost is also multiplied by `maxChildren`, which is independently capped at `100`.\n- `inspect_selection` sends this depth to the Figma REST API too, so deeper values also mean **more network data and slower responses**.\n- Very large responses may be **truncated or rejected** by the client, wasting the call.\n- Values above `64` are not supported, and would exceed how deeply the bridge captures a selection anyway.\n\nMost Figma designs nest under `12` levels; only raise this when a real selection is being cut off. Changes apply to the next MCP server start."
         }
       }
     },
@@ -497,7 +505,10 @@
     "test:integration": "vscode-test",
     "test:unit": "vitest run",
     "test": "npm run test:unit && npm run test:integration",
-    "verify-seed": "node tool/verify-seed.mjs"
+    "verify-seed": "node tool/verify-seed.mjs",
+    "prepublish:only": "npm run package",
+    "vsce:package": "vsce package --out figma-mcp-bridge-$(node -p \"require('./package.json').version\").vsix",
+    "vsce:publish": "npm run vsce:package && vsce publish --pat $VSCE_PAT"
   },
   "devDependencies": {
     "@eslint/js": "^9.15.0",
@@ -506,6 +517,7 @@
     "@types/vscode": "1.101.0",
     "@vscode/test-cli": "^0.0.10",
     "@vscode/test-electron": "^2.4.1",
+    "@vscode/vsce": "^4.0.0",
     "esbuild": "^0.24.0",
     "eslint": "^9.15.0",
     "mocha": "^10.8.2",

@@ -8,7 +8,7 @@ import { createStorageLayout, seedDir } from '../../src/core/paths';
 import { BridgeError } from '../../src/errors';
 import { BRIDGE_CLI_FILE, MANIFEST_FILE, MCP_SERVER_FILE, VERSION_FILE } from '../../src/constants';
 
-function writeRuntime(dir: string, sha: string, withManifest = true): void {
+function writeRuntime(dir: string, sha: string, withManifest = true, patchLevel?: number): void {
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, MCP_SERVER_FILE), `// mcp ${sha}`);
   fs.writeFileSync(path.join(dir, BRIDGE_CLI_FILE), `// cli ${sha}`);
@@ -22,6 +22,7 @@ function writeRuntime(dir: string, sha: string, withManifest = true): void {
         schema: 1,
         upstreamRepo: 'superdoccimo/figma-mcp-free',
         upstreamSha: sha,
+        ...(patchLevel === undefined ? {} : { patchLevel }),
         files: { [MCP_SERVER_FILE]: mcpHash, [BRIDGE_CLI_FILE]: cliHash },
       }),
     );
@@ -34,6 +35,11 @@ describe('parseManifest', () => {
     expect(m.schema).toBe(1);
     expect(m.upstreamSha).toBe('');
     expect(m.files).toEqual({});
+  });
+
+  it('defaults a missing patchLevel to 0 so pre-patch seeds are older', () => {
+    expect(parseManifest('{}').patchLevel).toBe(0);
+    expect(parseManifest('{"patchLevel":2}').patchLevel).toBe(2);
   });
 });
 
@@ -110,6 +116,26 @@ describe('RuntimeStore', () => {
     store.ensureInstalled();
     const mtimeAfter = fs.statSync(path.join(root, 'data', 'runtime', MCP_SERVER_FILE)).mtimeMs;
     expect(mtimeAfter).toBe(mtimeBefore);
+  });
+
+  it('reseeds when the seed carries a newer patchLevel at an identical sha', () => {
+    // The regression this guards: manifestNeedsUpgrade returned false whenever
+    // the shas matched, so an extension update that only patches the runtime
+    // would never reach an existing install and maxDepth would silently no-op.
+    writeRuntime(path.join(root, 'data', 'runtime'), 'sha-new', true, 0);
+    writeRuntime(seed, 'sha-new', true, 1);
+    store.ensureInstalled();
+    expect(store.getInstalledManifest()?.patchLevel).toBe(1);
+  });
+
+  it('does not downgrade to an older patchLevel at the same sha', () => {
+    writeRuntime(seed, 'sha-new', true, 2);
+    store.ensureInstalled();
+    writeRuntime(path.join(root, 'data', 'runtime'), 'sha-new', true, 5);
+    const mtimeBefore = fs.statSync(path.join(root, 'data', 'runtime', MCP_SERVER_FILE)).mtimeMs;
+    store.ensureInstalled();
+    expect(store.getInstalledManifest()?.patchLevel).toBe(5);
+    expect(fs.statSync(path.join(root, 'data', 'runtime', MCP_SERVER_FILE)).mtimeMs).toBe(mtimeBefore);
   });
 
   it('stageAndSwap rotates previous and supports rollback', () => {

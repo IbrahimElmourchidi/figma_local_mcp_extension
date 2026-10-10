@@ -19,6 +19,7 @@ function config(overrides: Partial<BridgeConfig> = {}): BridgeConfig {
     nodePath: '',
     figmaPluginId: '',
     autoCheckUpdates: false,
+    maxDepth: 5,
     ...overrides,
   };
 }

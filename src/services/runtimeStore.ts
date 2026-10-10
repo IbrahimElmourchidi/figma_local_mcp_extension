@@ -25,6 +25,15 @@ export interface RuntimeManifest {
   readonly builtBy?: string;
   readonly esbuildVersion?: string;
   readonly nodeTarget?: string;
+  /**
+   * Build-patch generation of the seeded bundles. Bumped by
+   * `tool/runtimePatches.mjs` whenever a patch changes, so an extension update
+   * that only patches the runtime (no upstream movement) still re-copies the
+   * seed. Absent on pre-patch manifests, which parse as 0.
+   */
+  readonly patchLevel?: number;
+  /** Per-file record of which build patches landed. Diagnostics only. */
+  readonly patches?: Readonly<Record<string, { applied: readonly string[]; skipped: readonly string[] }>>;
   readonly files: Readonly<Record<string, string>>;
 }
 
@@ -39,6 +48,8 @@ export function parseManifest(raw: string): RuntimeManifest {
     builtBy: data.builtBy,
     esbuildVersion: data.esbuildVersion,
     nodeTarget: data.nodeTarget,
+    patchLevel: data.patchLevel ?? 0,
+    patches: data.patches,
     files: data.files ?? {},
   };
 }
@@ -348,6 +359,14 @@ function manifestNeedsUpgrade(installed: RuntimeManifest, seed: RuntimeManifest)
     return false;
   }
   if (!a || a === 'unknown') {
+    return true;
+  }
+  // A newer patch generation always wins, even at an identical upstream SHA.
+  // Without this the `a === b` return below would short-circuit forever and an
+  // existing install would keep its pre-patch bundles, so
+  // `figmaMcpBridge.maxDepth` would silently do nothing for exactly the users
+  // who update in place.
+  if ((seed.patchLevel ?? 0) > (installed.patchLevel ?? 0)) {
     return true;
   }
   if (a === b) {

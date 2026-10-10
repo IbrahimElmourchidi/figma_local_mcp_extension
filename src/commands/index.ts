@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { SecretsStore } from '../config/secretsStore';
 import { readBridgeConfig, BridgeConfig } from '../config/bridgeConfig';
 import { BridgeService } from '../services/bridgeService';
-import { RuntimeStore } from '../services/runtimeStore';
+import { RuntimeStore, RuntimeManifest } from '../services/runtimeStore';
 import { NodeResolver } from '../services/nodeResolver';
 import { StateStore } from '../services/state';
 import { OutputChannels } from '../ui/output';
@@ -264,8 +264,21 @@ export function refreshRuntimeState(deps: CommandDeps): void {
       builtBy: manifest?.builtBy,
       healthy: deps.runtime.isHealthy(),
       hasRollback: deps.runtime.hasRollbackAvailable(),
+      patchLevel: manifest?.patchLevel,
+      skippedPatches: skippedPatchNames(manifest),
+      maxDepth: deps.config().maxDepth,
     });
   } catch (error) {
     deps.output.appendBridge(`Runtime refresh failed: ${String(error)}`);
   }
+}
+
+/** Flatten the per-file patch record into `file:name` entries for the tree. */
+function skippedPatchNames(manifest: RuntimeManifest | null | undefined): string[] {
+  if (!manifest?.patches) {
+    return [];
+  }
+  return Object.entries(manifest.patches).flatMap(([file, info]) =>
+    (info?.skipped ?? []).map((name) => `${file}:${name}`),
+  );
 }

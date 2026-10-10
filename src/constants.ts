@@ -42,6 +42,18 @@ export const ENV_BRIDGE_TOKEN = 'FIGMA_PLUGIN_BRIDGE_TOKEN';
 export const ENV_BRIDGE_URL = 'FIGMA_PLUGIN_BRIDGE_URL';
 export const ENV_FIGMA_TOKEN = 'FIGMA_TOKEN';
 
+// Read by the patched runtime bundles (see tool/runtimePatches.mjs). Upstream
+// hard-codes a ceiling of 5; this lets `figmaMcpBridge.maxDepth` move it.
+export const ENV_MAX_DEPTH = 'FIGMA_MCP_MAX_DEPTH';
+export const DEFAULT_MAX_DEPTH = 5;
+export const MAX_MAX_DEPTH = 64;
+
+/**
+ * Raising `maxDepth` past upstream's default is where responses start getting
+ * materially more expensive, so the settings UI asks for confirmation first.
+ */
+export const MAX_DEPTH_WARN_THRESHOLD = 5;
+
 export const MIN_PASSWORD_LENGTH = 32;
 export const MAX_PASSWORD_LENGTH = 512;
 
