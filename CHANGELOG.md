@@ -4,6 +4,13 @@ All notable changes to the "Figma MCP Bridge" extension are documented in this f
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [0.3.1] - 2026-10-10
+
+### Fixed
+
+- The Runtime section's **Max inspect depth** row is now clickable. It was rendered as a read-only label, so the value could only be changed through the Settings editor and there was no in-dashboard affordance for it. Clicking the row opens a pre-filled input box (validated as a whole number in 1–64) and writes the setting. Also available from the palette as **Figma MCP: Set Max Inspect Depth**.
+- `cmd()` tree rows accept an optional description and tooltip, so a clickable row can still display its current value (`12 (raised from 5)`) rather than reading as a plain action.
+
 ## [0.3.0] - 2026-10-10
 
 ### Added

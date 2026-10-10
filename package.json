@@ -2,7 +2,7 @@
   "name": "figma-mcp-bridge",
   "displayName": "Figma Local MCP Bridge",
   "description": "Manage the local Figma MCP bridge server, the Figma dev plugin, and connect Figma MCP to Copilot, Claude Code, Gemini CLI, Codex, opencode, Kilo Code, Cline and more.",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "publisher": "UtaniumOrg",
   "repository": {
     "type": "git",
