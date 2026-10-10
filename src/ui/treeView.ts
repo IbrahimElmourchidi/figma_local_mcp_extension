@@ -210,15 +210,18 @@ function sectionChildren(section: SectionId, snapshot: AppSnapshot): TreeNode[] 
       if (typeof r.patchLevel === 'number' && r.patchLevel > 0) {
         const depth = r.maxDepth ?? DEFAULT_MAX_DEPTH;
         items.push(
-          item(
+          cmd(
             'runtime.maxDepth',
             'Max inspect depth',
+            'figmaMcpBridge.setMaxDepth',
+            'settings-gear',
+            'figmaMcp.runtime.maxDepth',
             depth > DEFAULT_MAX_DEPTH ? `${depth} (raised from ${DEFAULT_MAX_DEPTH})` : String(depth),
             `Maximum node-tree depth the Figma inspect tools may return.\n` +
               `figmaMcpBridge.maxDepth = ${depth} (upstream default: ${DEFAULT_MAX_DEPTH})\n\n` +
-              `This only raises the ceiling — your agent still picks a depth per call. ` +
-              `Deeper responses mean more tokens, more cost, and larger Figma REST calls.\n` +
-              `Applies on the next MCP server start.`,
+              `Click to change. This only raises the ceiling — your agent still picks a depth\n` +
+              `per call. Deeper responses mean more tokens, more cost, and larger Figma REST\n` +
+              `calls. Applies on the next MCP server start.`,
           ),
         );
         if (r.skippedPatches && r.skippedPatches.length > 0) {
@@ -295,10 +298,16 @@ function cmd(
   command: string,
   icon: string,
   contextValue: string,
+  description?: string,
+  tooltip?: string,
 ): TreeNode {
   return {
     id,
     label,
+    // Optional so a clickable row can still show a value (e.g. the configured
+    // maxDepth) instead of looking like a plain action.
+    description: description ?? undefined,
+    tooltip: tooltip ?? (description ? `${label}: ${description}` : label),
     kind: 'item',
     icon,
     contextValue,

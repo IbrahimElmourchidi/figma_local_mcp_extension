@@ -31,6 +31,7 @@ const CORE_COMMANDS = [
   'figmaMcpBridge.openBuildLogs',
   'figmaMcpBridge.runSystemCheck',
   'figmaMcpBridge.saveSettings',
+  'figmaMcpBridge.setMaxDepth',
 ];
 
 suite('extension activation', () => {

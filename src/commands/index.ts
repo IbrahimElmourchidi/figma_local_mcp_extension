@@ -11,6 +11,7 @@ import { SystemChecker } from '../services/systemChecker';
 import { SourceBuilder } from '../services/sourceBuilder';
 import { probeHealth } from '../services/health';
 import { runCommand, BridgeError } from '../errors';
+import { CONFIG_SECTION, MAX_MAX_DEPTH } from '../constants';
 import { registerSecretsCommands } from './secretsCommands';
 import { registerAgentCommands } from './agentCommands';
 
@@ -252,6 +253,40 @@ export function registerAllCommands(deps: CommandDeps): void {
     readBridgeConfig();
     void vscode.window.showInformationMessage('Settings validated.');
   }, 'Save settings');
+
+  // Editable from the dashboard tree: the Runtime section's "Max inspect depth"
+  // row. The setting is machine-scoped, so write it at the Global target.
+  reg('figmaMcpBridge.setMaxDepth', async () => {
+    const current = deps.config().maxDepth;
+    const value = await vscode.window.showInputBox({
+      prompt: `Maximum inspect depth (1-${MAX_MAX_DEPTH})`,
+      value: String(current),
+      validateInput: (input) => {
+        const n = Number(input.trim());
+        if (!Number.isInteger(n)) {
+          return 'Must be a whole number';
+        }
+        if (n < 1 || n > MAX_MAX_DEPTH) {
+          return `Must be between 1 and ${MAX_MAX_DEPTH}`;
+        }
+        return undefined;
+      },
+    });
+    if (value === undefined) {
+      return;
+    }
+    const next = Number(value.trim());
+    await vscode.workspace
+      .getConfiguration(CONFIG_SECTION)
+      .update('maxDepth', next, vscode.ConfigurationTarget.Global);
+    // onDidChangeConfiguration refreshes state and shows the cost modal, so the
+    // tree row and the warning stay in one place.
+    if (next !== current) {
+      void vscode.window.showInformationMessage(
+        `Max inspect depth set to ${next}. Takes effect on the next MCP server start.`,
+      );
+    }
+  }, 'Set max inspect depth');
 }
 
 export function refreshRuntimeState(deps: CommandDeps): void {

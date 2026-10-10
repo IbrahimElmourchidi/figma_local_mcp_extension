@@ -214,6 +214,10 @@
       {
         "command": "figmaMcpBridge.saveSettings",
         "title": "Figma MCP: Validate Settings"
+      },
+      {
+        "command": "figmaMcpBridge.setMaxDepth",
+        "title": "Figma MCP: Set Max Inspect Depth"
       }
     ],
     "menus": {
@@ -250,6 +254,9 @@
         },
         {
           "command": "figmaMcpBridge.saveSettings"
+        },
+        {
+          "command": "figmaMcpBridge.setMaxDepth"
         },
         {
           "command": "figmaMcpBridge.configureAgent"
